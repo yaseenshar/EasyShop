@@ -1,0 +1,141 @@
+<!-- easyshop/pom.xml -->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.easyshop</groupId>
+    <artifactId>easyshop</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>EasyShop</name>
+
+    <!-- Declare all child modules -->
+    <modules>
+        <module>infrastructure/service-discovery</module>
+        <module>infrastructure/api-gateway</module>
+<!--        <module>infrastructure/config-server</module>-->
+        <module>common/common-lib</module>
+<!--        <module>services/user-service</module>-->
+<!--        <module>services/catalog-service</module>-->
+<!--        <module>services/order-service</module>-->
+<!--        <module>services/payment-service</module>-->
+<!--        <module>services/inventory-service</module>-->
+<!--        <module>services/cart-service</module>-->
+<!--        <module>services/notification-service</module>-->
+<!--        <module>services/review-service</module>-->
+    </modules>
+
+    <!-- Inherit from Spring Boot BOM for dependency version management -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.2</version>
+        <relativePath/>
+    </parent>
+
+    <properties>
+        <java.version>21</java.version>
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <!-- Centralized dependency versions -->
+        <resilience4j.version>2.2.0</resilience4j.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
+        <testcontainers.version>1.19.8</testcontainers.version>
+    </properties>
+
+    <!-- dependencyManagement = declare versions here, consume in children without versions -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Cloud BOM — imports the entire Spring Cloud dependency tree -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Resilience4j Spring Boot integration -->
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-spring-boot3</artifactId>
+                <version>${resilience4j.version}</version>
+            </dependency>
+            <!-- MapStruct for DTO↔Entity mapping — compile-time, no reflection -->
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct</artifactId>
+                <version>${mapstruct.version}</version>
+            </dependency>
+            <!-- Testcontainers BOM for integration tests with real DBs/Kafka -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- EasyShop common library — shared across all services -->
+            <dependency>
+                <groupId>com.easyshop</groupId>
+                <artifactId>common-lib</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- Dependencies every child module automatically gets -->
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- Jib plugin — builds Docker images without a Docker daemon -->
+                <plugin>
+                    <groupId>com.google.cloud.tools</groupId>
+                    <artifactId>jib-maven-plugin</artifactId>
+                    <version>3.4.2</version>
+                    <configuration>
+                        <from>
+                            <!-- Distroless Java 21 — minimal attack surface, no shell -->
+                            <image>gcr.io/distroless/java21-debian12</image>
+                        </from>
+                        <to>
+                            <image>gcr.io/easyshop/${project.artifactId}:${project.version}</image>
+                        </to>
+                    </configuration>
+                </plugin>
+                <!-- Surefire for unit tests -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.5</version>
+                </plugin>
+                <!-- Failsafe for integration tests (@IntegrationTest) -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>3.2.5</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>integration-test</goal>
+                                <goal>verify</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>
