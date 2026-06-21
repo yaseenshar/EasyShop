@@ -14,7 +14,7 @@
         <module>infrastructure/api-gateway</module>
 <!--        <module>infrastructure/config-server</module>-->
         <module>common/common-lib</module>
-<!--        <module>services/user-service</module>-->
+        <module>services/user-service</module>
 <!--        <module>services/catalog-service</module>-->
 <!--        <module>services/order-service</module>-->
 <!--        <module>services/payment-service</module>-->
