@@ -1,0 +1,28 @@
+server:
+  port: 8761                              # Standard Eureka port — don't change, clients default to this
+
+spring:
+  application:
+    name: service-discovery
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    register-with-eureka: false             # Eureka server should NOT register with itself or fetch its own registry
+    fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    enable-self-preservation: false         # Disables eviction protection in dev — in prod this prevents mass de-registration
+    eviction-interval-timer-in-ms: 5000     # during network partitions (important concept for interviews!)
+    wait-time-in-ms-when-sync-empty: 0      # skip initial sync delay in dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
