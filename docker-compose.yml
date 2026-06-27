@@ -65,6 +65,37 @@ services:
       retries: 5
       start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
 
+  order-service:
+    build:
+      context: .                                    # build context = repo root
+      dockerfile: services/order-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/easyshop
+      - SPRING_DATASOURCE_USERNAME=easyshop
+      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
+    networks: [ easyshop-network ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8082/actuator/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
+
   # ── PostgreSQL ─────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine    # Alpine = minimal image, ~80MB vs ~400MB full

@@ -2,8 +2,6 @@ package com.easyshop.user.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.time.Instant;
 import java.util.UUID;
