@@ -1,3 +1,26 @@
+DROP TABLE IF EXISTS users CASCADE;
+
+CREATE TABLE users
+(
+    id           UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    keycloak_id  VARCHAR(255) NOT NULL UNIQUE,
+    email        VARCHAR(320) NOT NULL UNIQUE,
+    first_name   VARCHAR(100) NOT NULL,
+    last_name    VARCHAR(100) NOT NULL,
+    phone_number VARCHAR(20),
+    loyalty_tier VARCHAR(20)  NOT NULL DEFAULT 'BRONZE',
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_loyalty_tier CHECK (loyalty_tier IN ('BRONZE', 'SILVER', 'GOLD', 'PLATINUM'))
+);
+
+-- Index on keycloak_id: every authenticated request looks up the user by this
+-- column (extracted from JWT 'sub' claim), so this is the hottest read path.
+CREATE INDEX idx_users_keycloak_id ON users (keycloak_id);
+
+DROP TABLE IF EXISTS shipping_addresses CASCADE;
+
 CREATE TABLE shipping_addresses
 (
     id             UUID PRIMARY KEY     DEFAULT gen_random_uuid(),

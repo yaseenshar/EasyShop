@@ -1,0 +1,60 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: order-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/easyshop
+    username: easyshop
+    password: ${POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    table: flyway_schema_history_order
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: order-service-saga
+      auto-offset-reset: earliest
+      # Manual ack is the safer default for saga reply consumers: we only
+      # want Kafka to advance the consumer offset AFTER our @Transactional
+      # listener method has committed its DB changes. Otherwise a crash
+      # between "Kafka auto-commits offset" and "our DB transaction commits"
+      # would silently lose a saga step.
+      enable-auto-commit: false
+    listener:
+      ack-mode: manual_immediate
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8090/realms/easyshop
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  tracing:
+    sampling:
+      probability: 1.0

@@ -11,6 +11,8 @@
 -- 3. created_at/updated_at use TIMESTAMPTZ, not TIMESTAMP, to avoid timezone bugs
 --    that are notoriously hard to debug in production (classic interview gotcha).
 
+DROP TABLE IF EXISTS users CASCADE;
+
 CREATE TABLE users
 (
     id           UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
