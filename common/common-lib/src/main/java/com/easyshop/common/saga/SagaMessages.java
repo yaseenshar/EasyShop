@@ -1,4 +1,4 @@
-package com.easyshop.order.saga;
+package com.easyshop.common.saga;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -6,16 +6,23 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Command and reply payloads for the order saga. Records (Java 25) give us
- * immutability and structural equality for free - exactly what you want for
- * message payloads that cross a network boundary and should never be mutated
- * after construction.
+ * Shared saga message contracts, living in common-lib so that EVERY
+ * participant (order-service, payment-service, inventory-service) compiles
+ * against the exact same record definitions. This was originally drafted
+ * separately inside order-service (Phase 3's SagaMessages) and inside
+ * payment-service - duplicating a wire contract across services is a real
+ * design smell: it lets the two sides silently drift out of sync (e.g. one
+ * side adds a field, the other doesn't, and you only find out at runtime
+ * deserialization). Centralizing it here in common-lib is the fix, mirroring
+ * the same reasoning that moved the Outbox base classes here.
+ *
+ * order-service's saga/SagaMessages.java and payment-service's saga payload
+ * records should now be deleted in favor of importing directly from here -
+ * noted as a follow-up cleanup task.
  */
 public final class SagaMessages {
 
     private SagaMessages() {}
-
-    // ── Commands: order-service -> participant ──────────────────────────
 
     public record ReserveStockCommand(
             UUID orderId,
@@ -30,7 +37,7 @@ public final class SagaMessages {
             UUID userId,
             BigDecimal amount,
             String currency,
-            String idempotencyKey,   // reused from the order's own idempotency key
+            String idempotencyKey,
             Instant issuedAt
     ) {}
 
@@ -45,8 +52,6 @@ public final class SagaMessages {
             UUID reservationId,
             Instant issuedAt
     ) {}
-
-    // ── Replies: participant -> order-service ────────────────────────────
 
     public record StockReservationReply(
             UUID orderId,

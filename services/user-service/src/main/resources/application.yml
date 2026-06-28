@@ -6,7 +6,7 @@ spring:
     name: user-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/easyshop
+    url: jdbc:postgresql://localhost:5432/easyshop_user
     username: easyshop
     password: ${POSTGRES_PASSWORD}
     hikari:
@@ -60,4 +60,8 @@ management:
       show-details: when_authorized
   tracing:
     sampling:
-      probability: 1.0   # 100% sampling for dev; lower in production (e.g. 0.1)
+      probability: 1.0
+  otlp:
+    metrics:
+      export:
+        enabled: false
