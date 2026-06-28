@@ -7,6 +7,7 @@ COPY infrastructure/service-discovery/pom.xml infrastructure/service-discovery/p
 COPY infrastructure/api-gateway/pom.xml infrastructure/api-gateway/pom.xml
 COPY services/user-service/pom.xml services/user-service/pom.xml
 COPY services/order-service/pom.xml services/order-service/pom.xml
+COPY services/payment-service/pom.xml services/payment-service/pom.xml
 # Copy only the sources needed for this module and its dependencies
 COPY common/common-lib/src common/common-lib/src
 COPY infrastructure/service-discovery/src infrastructure/service-discovery/src
