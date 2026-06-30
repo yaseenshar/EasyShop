@@ -35,8 +35,6 @@ A production-grade, event-driven e-commerce platform built with **Spring Boot**,
 
 ## High-Level Architecture
 
-> Architecture image : `docs/images/architecture.png`
-
 ![EasyShop High-Level Architecture](docs/images/architecture.png)
 
 ### Request/Event Flow (Summary)
