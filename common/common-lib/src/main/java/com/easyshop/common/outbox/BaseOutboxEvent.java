@@ -42,7 +42,7 @@ public abstract class BaseOutboxEvent {
     protected String topic;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "jsonb")
+    @Column(nullable = false)
     protected String payload;
 
     @Column(nullable = false)

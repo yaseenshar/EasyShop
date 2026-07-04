@@ -11,13 +11,13 @@ COPY services/payment-service/pom.xml services/payment-service/pom.xml
 COPY services/inventory-service/pom.xml services/inventory-service/pom.xml
 # Copy only the sources needed for this module and its dependencies
 COPY common/common-lib/src common/common-lib/src
-COPY services/order-service/src services/order-service/src
+COPY services/inventory-service/src services/inventory-service/src
 
-RUN mvn package -pl services/order-service -am -DskipTests
+RUN mvn package -pl services/inventory-service -am -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache curl
 WORKDIR /app
-COPY --from=build /app/services/order-service/target/*.jar app.jar
-EXPOSE 8082
+COPY --from=build /app/services/inventory-service/target/*.jar app.jar
+EXPOSE 8084
 ENTRYPOINT ["java", "-jar", "app.jar"]
