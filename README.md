@@ -359,4 +359,5 @@ You can expose aggregated docs through API Gateway for easier discovery.
 
 ## License
 
-Add your license in `LICENSE` (MIT/Apache-2.0 recommended for open-source projects).
+This project is licensed under the **MIT License**.  
+See the [LICENSE](./LICENSE) file for details.
