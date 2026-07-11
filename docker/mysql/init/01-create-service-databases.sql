@@ -20,11 +20,13 @@
 
 CREATE DATABASE IF NOT EXISTS easyshop_inventory;
 CREATE DATABASE IF NOT EXISTS easyshop_catalog;
+CREATE DATABASE IF NOT EXISTS easyshop_review;
 -- catalog-service and cart-service intentionally excluded: catalog uses
 -- MySQL (Phase 1 decision), cart-service uses Redis as its primary store.
 
 GRANT ALL PRIVILEGES ON easyshop_inventory.* TO 'easyshop'@'%';
 GRANT ALL PRIVILEGES ON easyshop_catalog.* TO 'easyshop'@'%';
+GRANT ALL PRIVILEGES ON easyshop_review.* TO 'easyshop'@'%';
 
 FLUSH PRIVILEGES;
 
