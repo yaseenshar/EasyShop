@@ -198,6 +198,60 @@ services:
       retries: 5
       start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
 
+  review-service:
+    build:
+      context: .                                    # build context = repo root
+      dockerfile: services/review-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
+    ports:
+      - "8086:8086"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/easyshop_review
+      - SPRING_DATASOURCE_USERNAME=easyshop
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
+    networks: [ easyshop-network ]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      service-discovery:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8086/actuator/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
+
+  notification-service:
+    build:
+      context: .                                    # build context = repo root
+      dockerfile: services/notification-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
+    ports:
+      - "8087:8087"
+    environment:
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
+    networks: [ easyshop-network ]
+    depends_on:
+      service-discovery:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8087/actuator/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
+
   # ── PostgreSQL ─────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine    # Alpine = minimal image, ~80MB vs ~400MB full
