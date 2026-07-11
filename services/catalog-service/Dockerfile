@@ -9,7 +9,7 @@ COPY services/user-service/pom.xml services/user-service/pom.xml
 COPY services/order-service/pom.xml services/order-service/pom.xml
 COPY services/payment-service/pom.xml services/payment-service/pom.xml
 COPY services/inventory-service/pom.xml services/inventory-service/pom.xml
-COPY services/cart-service/pom.xml services/cart-service/pom.xml
+COPY services/catalog-service/pom.xml services/catalog-service/pom.xml
 # Copy only the sources needed for this module and its dependencies
 COPY common/common-lib/src common/common-lib/src
 COPY services/catalog-service/src services/catalog-service/src
