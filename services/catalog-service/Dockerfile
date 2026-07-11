@@ -9,16 +9,16 @@ COPY services/user-service/pom.xml services/user-service/pom.xml
 COPY services/order-service/pom.xml services/order-service/pom.xml
 COPY services/payment-service/pom.xml services/payment-service/pom.xml
 COPY services/inventory-service/pom.xml services/inventory-service/pom.xml
-COPY services/catalog-service/pom.xml services/catalog-service/pom.xml
+COPY services/cart-service/pom.xml services/cart-service/pom.xml
 # Copy only the sources needed for this module and its dependencies
 COPY common/common-lib/src common/common-lib/src
-COPY services/inventory-service/src services/inventory-service/src
+COPY services/catalog-service/src services/catalog-service/src
 
-RUN mvn package -pl services/inventory-service -am -DskipTests
+RUN mvn package -pl services/catalog-service -am -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache curl
 WORKDIR /app
-COPY --from=build /app/services/inventory-service/target/*.jar app.jar
-EXPOSE 8084
+COPY --from=build /app/services/catalog-service/target/*.jar app.jar
+EXPOSE 8085
 ENTRYPOINT ["java", "-jar", "app.jar"]
