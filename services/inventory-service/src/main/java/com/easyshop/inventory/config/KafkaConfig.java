@@ -1,6 +1,7 @@
 package com.easyshop.inventory.config;
 
 import tools.jackson.databind.json.JsonMapper;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -9,6 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.converter.JacksonJsonMessageConverter;
 
@@ -18,6 +21,19 @@ import java.util.Map;
 
 @Configuration
 public class KafkaConfig {
+
+    // KAFKA_AUTO_CREATE_TOPICS_ENABLE=false on the broker; see order-service's
+    // KafkaConfig for the full rationale. Declared here because
+    // inventory-service is the producer of both saga reply topics.
+    @Bean
+    public NewTopic inventoryReservationReplyTopic() {
+        return TopicBuilder.name("inventory.stock-reservation.reply").partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic inventoryConfirmationReplyTopic() {
+        return TopicBuilder.name("inventory.stock-confirmation.reply").partitions(1).replicas(1).build();
+    }
 
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
@@ -57,6 +73,11 @@ public class KafkaConfig {
         factory.setConsumerFactory(consumerFactory);
         factory.setRecordMessageConverter(new JacksonJsonMessageConverter(objectMapper));
         factory.setConcurrency(1);
+        // This hand-built factory bypasses Boot's auto-configured one, so
+        // spring.kafka.listener.ack-mode in application.yml is never read -
+        // it has to be set here instead. Listeners take an Acknowledgment
+        // param and need MANUAL_IMMEDIATE or Spring throws IllegalStateException.
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
 
         return factory;
     }

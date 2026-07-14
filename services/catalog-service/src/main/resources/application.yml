@@ -8,7 +8,7 @@ spring:
   datasource:
     # Per-service isolated database - the hard project rule. Catalog gets
     # its own MySQL database, separate from easyshop_inventory.
-    url: jdbc:mysql://localhost:3306/easyshop_catalog?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/easyshop_catalog?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: easyshop
     password: ${MYSQL_PASSWORD}
     hikari:

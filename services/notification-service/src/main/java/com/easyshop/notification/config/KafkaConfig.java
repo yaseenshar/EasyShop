@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
+import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.converter.JacksonJsonMessageConverter;
@@ -110,6 +111,11 @@ public class KafkaConfig {
         factory.setRecordMessageConverter(new JacksonJsonMessageConverter(jsonMapper));
         factory.setCommonErrorHandler(errorHandler);
         factory.setConcurrency(2);
+        // This hand-built factory bypasses Boot's auto-configured one, so
+        // spring.kafka.listener.ack-mode in application.yml is never read -
+        // it has to be set here instead. Listeners take an Acknowledgment
+        // param and need MANUAL_IMMEDIATE or Spring throws IllegalStateException.
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         return factory;
     }
 }

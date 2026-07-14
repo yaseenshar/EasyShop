@@ -18,9 +18,16 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
         </dependency>
+        <!-- optional=true: needed to compile BaseOutboxEvent/BaseOutboxRepository
+             here, but must NOT leak transitively into every consumer. Services
+             that use the outbox base classes (order/payment/inventory/review/...)
+             already declare spring-boot-starter-data-jpa themselves. Services
+             that don't (notification-service, cart-service) would otherwise get
+             JPA autoconfiguration pulled in with no DataSource configured. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <optional>true</optional>
         </dependency>
     </dependencies>
 

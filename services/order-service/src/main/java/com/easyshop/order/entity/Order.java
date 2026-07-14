@@ -28,8 +28,11 @@ public class Order {
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
+    // No currency in CreateOrderRequest/OrderLineRequest - this system is
+    // single-currency in practice (matches catalog-service's Product.currency
+    // default), so there's nothing for the caller to actually pass here.
     @Column(nullable = false, length = 3)
-    private String currency;
+    private String currency = "USD";
 
     @Column(name = "shipping_address_id")
     private UUID shippingAddressId;

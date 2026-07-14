@@ -9,7 +9,10 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import tools.jackson.databind.DefaultTyping;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 
 import java.time.Duration;
 import java.util.Map;
@@ -67,7 +70,33 @@ public class CacheConfig {
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
                                           ObjectMapper objectMapper) {
 
-        var jsonSerializer = new GenericJacksonJsonRedisSerializer(objectMapper);
+        // The shared app ObjectMapper has no polymorphic type info enabled
+        // (Boot's default, and rightly so - unrestricted default typing is
+        // a deserialization RCE vector). Without it, GenericJacksonJsonRedis-
+        // Serializer writes plain JSON with no type hint, so a cache HIT
+        // deserializes to a generic LinkedHashMap instead of the original
+        // record type and blows up with a ClassCastException at the call
+        // site. Type info is only worth enabling on a cache-scoped copy of
+        // the mapper, restricted to this service's own DTO package.
+        //
+        // DefaultTyping.NON_FINAL_AND_RECORDS, not NON_FINAL: the cached
+        // types (ProductResponse, PagedResponse) are records, and every
+        // Java record is implicitly final. Plain NON_FINAL deliberately
+        // skips type hints for final classes on the assumption the
+        // caller's static type is enough to deserialize - true for a
+        // normal field, false here, since RedisCache always reads back
+        // through erased Object.class. Without the _AND_RECORDS variant
+        // the root value gets no type hint at all and deserializes to a
+        // raw LinkedHashMap.
+        PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.easyshop.catalog.dto")
+                .allowIfSubType("java.util")
+                .build();
+        ObjectMapper cacheMapper = objectMapper.rebuild()
+                .activateDefaultTyping(typeValidator, DefaultTyping.NON_FINAL_AND_RECORDS)
+                .build();
+
+        var jsonSerializer = new GenericJacksonJsonRedisSerializer(cacheMapper);
 
         RedisCacheConfiguration defaults = RedisCacheConfiguration.defaultCacheConfig()
                 .serializeKeysWith(SerializationPair.fromSerializer(new StringRedisSerializer()))

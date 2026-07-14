@@ -1,12 +1,12 @@
 package com.easyshop.catalog.controller;
 
 import com.easyshop.catalog.dto.ProductDtos.CreateProductRequest;
+import com.easyshop.catalog.dto.ProductDtos.PagedResponse;
 import com.easyshop.catalog.dto.ProductDtos.ProductResponse;
 import com.easyshop.catalog.dto.ProductDtos.UpdateProductRequest;
 import com.easyshop.catalog.service.ProductService;
 import com.easyshop.common.dto.response.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,7 +29,7 @@ public class ProductController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<ProductResponse>>> listByCategory(
+    public ResponseEntity<ApiResponse<PagedResponse<ProductResponse>>> listByCategory(
             @RequestParam UUID categoryId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {

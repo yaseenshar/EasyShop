@@ -7,80 +7,109 @@ spring:
 
   cloud:
     gateway:
-      # Global CORS config — applies to all routes
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins:
-              - "http://localhost:4200"   # Angular dev server
-              - "https://easyshop.com"    # Production
-            allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
-            allowedHeaders: ["*"]
-            allowCredentials: true
-            maxAge: 3600
+      # NOTE: as of Spring Cloud Gateway 5.x (spring-cloud-starter-gateway-
+      # server-webflux), route/CORS/filter config lives under
+      # spring.cloud.gateway.server.webflux.* - the classic
+      # spring.cloud.gateway.* prefix (routes/default-filters/globalcors
+      # directly under "gateway") is silently ignored, which registers ZERO
+      # routes and makes every request 404 at the fallback handler.
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins:
+                  - "http://localhost:4200"   # Angular dev server
+                  - "https://easyshop.com"    # Production
+                allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
+                allowedHeaders: ["*"]
+                allowCredentials: true
+                maxAge: 3600
 
-      # Default filters applied to every route
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
-        - name: RequestRateLimiter
-          args:
-            # Redis-backed token bucket algorithm
-            redis-rate-limiter.replenishRate: 10   # tokens added per second
-            redis-rate-limiter.burstCapacity: 20   # max burst
-            redis-rate-limiter.requestedTokens: 1
-            key-resolver: "#{@userKeyResolver}"    # Rate limit per user (from JWT claim)
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
 
-      routes:
-        # Each route: id, uri (lb:// = Eureka load-balanced), predicates, filters
-        - id: user-service
-          uri: lb://user-service
-          predicates:
-            - Path=/api/v1/users/**
-          filters:
-            - StripPrefix=2   # removes /api/v1 before forwarding
+          routes:
+            # ── PUBLIC ROUTES - the complete, deliberate list ────────────────
+            # REFACTORED from Phase 1: payment-service route REMOVED (it is
+            # Kafka-driven only; a public route was attack surface with no
+            # legitimate caller). inventory-service and notification-service
+            # were never routed and stay that way. review-service ADDED (built
+            # after the original config). Internal paths (/internal/**) are
+            # unreachable by construction: no route's Path predicate matches
+            # them, so order-service's purchase-check endpoint is
+            # service-to-service only.
 
-        - id: catalog-service
-          uri: lb://catalog-service
-          predicates:
-            - Path=/api/v1/products/**,/api/v1/categories/**
-          filters:
-            - StripPrefix=2
+            - id: user-service
+              uri: lb://user-service
+              predicates:
+                - Path=/api/v1/users/**
+              filters:
+                - name: AuthenticationFilter
 
-        - id: order-service
-          uri: lb://order-service
-          predicates:
-            - Path=/api/v1/orders/**
-          filters:
-            - StripPrefix=2
-            - name: AuthenticationFilter   # Only authenticated users can create orders
+            - id: catalog-service
+              uri: lb://catalog-service
+              predicates:
+                - Path=/api/v1/products/**,/api/v1/categories/**
+              # No AuthenticationFilter: catalog browsing is anonymous by
+              # design (rate-limited by IP via the default filter's key
+              # resolver fallback). Writes are protected downstream by
+              # catalog-service's own resource-server config - defense in
+              # depth means the gateway filter is a convenience layer, never
+              # the only gate.
 
-        - id: cart-service
-          uri: lb://cart-service
-          predicates:
-            - Path=/api/v1/cart/**
-          filters:
-            - StripPrefix=2
+            - id: order-service
+              uri: lb://order-service
+              predicates:
+                - Path=/api/v1/orders/**
+              filters:
+                - name: AuthenticationFilter
 
-        - id: payment-service
-          # NEVER expose payment endpoints publicly — internal only
-          uri: lb://payment-service
-          predicates:
-            - Path=/api/v1/payments/**
-          filters:
-            - StripPrefix=2
-            - name: AuthenticationFilter
+            - id: cart-service
+              uri: lb://cart-service
+              predicates:
+                - Path=/api/v1/cart/**
+              filters:
+                - name: AuthenticationFilter
 
-  # Redis config for rate limiting
-  data:
-    redis:
-      host: localhost
-      port: 6379
+            - id: review-service
+              uri: lb://review-service
+              predicates:
+                - Path=/api/v1/reviews/**
+              # No gateway auth filter: GET endpoints (product reviews,
+              # rating summaries) are public reads; review-service's own
+              # SecurityConfig enforces auth on submission and ADMIN on
+              # moderation. The gateway stays out of per-method decisions -
+              # path-level routing here, method-level authorization there.
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Spring Boot auto-discovers the JWKS endpoint from this issuer's
+          # /.well-known/openid-configuration - no manual key management needed.
+          issuer-uri: http://localhost:8090/realms/easyshop
 
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
-  instance:
-    prefer-ip-address: true   # Critical in Docker/K8s — use IP, not hostname
-    lease-renewal-interval-in-seconds: 10
-    lease-expiration-duration-in-seconds: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  # Being in exposure.include isn't enough on its own - each endpoint has
+  # its own default Access level, and "gateway" (route introspection)
+  # defaults to "none" (fully disabled) since it's more sensitive than
+  # health/info. Needs an explicit grant to actually be reachable.
+  endpoint:
+    gateway:
+      access: unrestricted
