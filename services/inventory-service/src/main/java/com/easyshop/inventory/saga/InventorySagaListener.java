@@ -32,6 +32,9 @@ public class InventorySagaListener {
     public void onReserveCommand(ReserveStockCommand command, Acknowledgment ack) {
         try {
             handleReserveCommand(command);
+        } catch (Exception e) {
+            log.error("Unexpected failure reserving stock for order {}", command.orderId(), e);
+            publishReply(command.orderId(), false, null, e.getMessage());
         } finally {
             ack.acknowledge();
         }
@@ -69,11 +72,11 @@ public class InventorySagaListener {
         try {
             reservationService.confirmOrder(command.orderId());
             var reply = new StockConfirmationReply(command.orderId(), true, null);
-            writeReply("inventory.confirm-stock.reply", command.orderId(), reply);
+            writeReply("inventory.stock-confirmation.reply", command.orderId(), reply);
         } catch (Exception e) {
             log.error("Failed to confirm stock for order {}", command.orderId(), e);
             var reply = new StockConfirmationReply(command.orderId(), false, e.getMessage());
-            writeReply("inventory.confirm-stock.reply", command.orderId(), reply);
+            writeReply("inventory.stock-confirmation.reply", command.orderId(), reply);
         } finally {
             ack.acknowledge();
         }

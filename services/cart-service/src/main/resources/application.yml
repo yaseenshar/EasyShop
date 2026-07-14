@@ -1,0 +1,45 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: cart-service
+
+  # Redis is the PRIMARY store here, not a cache. Durability note: the
+  # Phase 1 compose file runs Redis with RDB snapshots (--save 60 1),
+  # meaning up to ~60s of cart changes can be lost on a crash. For
+  # cart-as-primary-store, consider upgrading the Redis command in
+  # docker-compose to add:  --appendonly yes --appendfsync everysec
+  # (AOF: bounded ~1s loss; RDB+AOF together is the production standard).
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ${REDIS_PASSWORD}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8090/realms/easyshop
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  tracing:
+    sampling:
+      probability: 1.0

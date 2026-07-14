@@ -2,6 +2,8 @@ package com.easyshop.review.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -21,6 +23,7 @@ public class Review {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    @JdbcTypeCode(SqlTypes.TINYINT)
     @Column(nullable = false)
     private int rating;
 

@@ -1,269 +1,127 @@
+# =============================================================================
+# EasyShop - MEMORY-OPTIMIZED docker-compose
+# Target: full stack under ~5.5 GB worst-case on an 8 GB machine.
+#
+# The three layers applied here:
+#   1. Every JVM capped (mem_limit) AND told about the cap (MaxRAMPercentage)
+#   2. Zookeeper eliminated (Kafka KRaft), UI/observability behind profiles
+#   3. Profiles enable running slices instead of the whole fleet
+#
+# MERGE NOTES vs your current file:
+#   - Ports below match your running containers (cart 8087, notification 8088,
+#     review 8086). Adjust build contexts to your layout if they differ.
+#   - KRaft needs a FRESH Kafka volume: `docker compose down -v` once (or at
+#     least remove the old kafka + zookeeper volumes) before first start -
+#     Zookeeper-era data directories are not KRaft-compatible.
+#   - Keep your .env exactly as is.
+# =============================================================================
+
+# ── Shared JVM flags for every Spring Boot service ───────────────────────────
+# JAVA_TOOL_OPTIONS is honored automatically by any JVM (you'll see
+# "Picked up JAVA_TOOL_OPTIONS" in each service's log - that's your proof
+# it applied). One anchor, no Dockerfile edits.
+#
+#   -XX:MaxRAMPercentage=70    heap = 70% of the CONTAINER limit (not host RAM)
+#   -XX:+UseSerialGC           lowest-footprint GC; G1's bookkeeping is pure
+#                              overhead on heaps this small (dev-only choice)
+#   -Xss512k                   halve the default 1 MB thread stacks
+#   -XX:MaxMetaspaceSize=160m  Spring apps settle ~100-130 MB; cap the rest
+#   -XX:ReservedCodeCacheSize=48m   plenty once C2 is off (next flag)
+#   -XX:TieredStopAtLevel=1    C1-only JIT: faster startup, smaller code
+#                              cache; slower peak throughput - fine for dev,
+#                              REMOVE for load testing / production
+#   -XX:+ExitOnOutOfMemoryError    die fast and restart clean instead of
+#                              limping along after an OOM
+
+x-jvm-opts: &jvm_opts >-
+  -XX:MaxRAMPercentage=70
+  -XX:+UseSerialGC
+  -Xss512k
+  -XX:MaxMetaspaceSize=160m
+  -XX:ReservedCodeCacheSize=48m
+  -XX:TieredStopAtLevel=1
+  -XX:+ExitOnOutOfMemoryError
+
+# Spring-level trims, merged into each service's environment:
+#   Tomcat 200 -> 20 max threads (stacks + churn), Hikari 10 -> 5 connections.
+#   Harmlessly ignored by services without Tomcat (gateway/Netty) or without
+#   a datasource (cart, notification).
+x-spring-env: &spring_env
+  JAVA_TOOL_OPTIONS: *jvm_opts
+  SERVER_TOMCAT_THREADS_MAX: "20"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+  EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-discovery:8761/eureka/
+  EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+
+# App healthchecks note: temurin/alpine JRE images ship no curl (ubuntu
+# base) or no bash (alpine base), so portable in-compose probes for the
+# Java apps are unreliable. Infra images (postgres/mysql/redis/kafka) ship
+# their own CLI tools - those keep real healthchecks below, and they are
+# the only hard startup dependencies (Flyway/Hikari fail fast without a
+# DB; Kafka consumers need a broker). App-to-app ordering rides on client
+# retry instead.
+
 networks:
   easyshop-network:
     driver: bridge
 
+volumes:
+  postgres-data:
+  mysql-data:
+  redis-data:
+  kafka-data:
+  grafana-data:
+
 services:
 
-  # ── Service Discovery ──────────────────────────────────────────────────
+  # ═══════════════════════ INFRASTRUCTURE (always on) ═══════════════════════
+
   service-discovery:
     build:
       context: .
       dockerfile: infrastructure/service-discovery/Dockerfile
-    ports:
-      - "8761:8761"
+    ports: ["8761:8761"]
+    mem_limit: 320m
+    environment:
+      JAVA_TOOL_OPTIONS: *jvm_opts
     networks: [easyshop-network]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
+    # NO healthcheck - deliberately. The previous bash-/dev/tcp probe was a
+    # bash-ism that fails with exit 127 on any image without bash (alpine/
+    # slim JRE bases), branding a working Eureka unhealthy. More importantly,
+    # dependents now use service_started for discovery: Eureka CLIENTS RETRY
+    # registration on their own, so startup ordering is not load-bearing
+    # here - retry logic, not container choreography, handles it. If you
+    # want a real probe back, reuse your previously-working healthcheck
+    # (your images showed healthy before), or add curl/wget to the
+    # Dockerfile and probe /actuator/health.
 
-  # ── API Gateway ────────────────────────────────────────────────────────
   api-gateway:
     build:
       context: .
       dockerfile: infrastructure/api-gateway/Dockerfile
-    ports:
-      - "8080:8080"
+    ports: ["8080:8080"]
+    mem_limit: 384m
+    environment:
+      <<: *spring_env
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
+    depends_on:
+      service-discovery: { condition: service_started }
+      redis: { condition: service_healthy }
     networks: [easyshop-network]
-    environment:
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - SPRING_DATA_REDIS_HOST=redis
-      - JWT_SECRET=${JWT_SECRET}
-    depends_on:
-      service-discovery:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
-  user-service:
-    build:
-      context: .                                    # build context = repo root
-      dockerfile: services/user-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
-    ports:
-      - "8081:8081"
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/easyshop_user
-      - SPRING_DATASOURCE_USERNAME=easyshop
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
-    networks: [ easyshop-network ]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      service-discovery:
-        condition: service_healthy
-      keycloak:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
-
-  order-service:
-    build:
-      context: .                                    # build context = repo root
-      dockerfile: services/order-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
-    ports:
-      - "8082:8082"
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/easyshop_order
-      - SPRING_DATASOURCE_USERNAME=easyshop
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
-    networks: [ easyshop-network ]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      service-discovery:
-        condition: service_healthy
-      keycloak:
-        condition: service_started
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8082/actuator/health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
-
-
-  inventory-service:
-    build:
-      context: .                                    # build context = repo root
-      dockerfile: services/inventory-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
-    ports:
-      - "8084:8084"
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/easyshop_inventory
-      - SPRING_DATASOURCE_USERNAME=easyshop
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
-    networks: [ easyshop-network ]
-    depends_on:
-      mysql:
-        condition: service_healthy
-      service-discovery:
-        condition: service_healthy
-      keycloak:
-        condition: service_started
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8084/actuator/health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
-
-  payment-service:
-    build:
-      context: .                                    # build context = repo root
-      dockerfile: services/payment-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
-    ports:
-      - "8083:8083"
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/easyshop_payment
-      - SPRING_DATASOURCE_USERNAME=easyshop
-      - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD}
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
-    networks: [ easyshop-network ]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      service-discovery:
-        condition: service_healthy
-      keycloak:
-        condition: service_started
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8083/actuator/health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
-
-  catalog-service:
-    build:
-      context: .                                    # build context = repo root
-      dockerfile: services/catalog-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
-    ports:
-      - "8085:8085"
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/easyshop_catalog
-      - SPRING_DATASOURCE_USERNAME=easyshop
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SPRING_DATA_REDIS_HOST=redis
-      - SPRING_DATA_REDIS_PASSWORD=${REDIS_PASSWORD}
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
-    networks: [ easyshop-network ]
-    depends_on:
-      mysql:
-        condition: service_healthy
-      service-discovery:
-        condition: service_healthy
-      keycloak:
-        condition: service_started
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8085/actuator/health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
-
-  review-service:
-    build:
-      context: .                                    # build context = repo root
-      dockerfile: services/review-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
-    ports:
-      - "8086:8086"
-    environment:
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/easyshop_review
-      - SPRING_DATASOURCE_USERNAME=easyshop
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
-    networks: [ easyshop-network ]
-    depends_on:
-      mysql:
-        condition: service_healthy
-      service-discovery:
-        condition: service_healthy
-      keycloak:
-        condition: service_started
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8086/actuator/health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
-
-  notification-service:
-    build:
-      context: .                                    # build context = repo root
-      dockerfile: services/notification-service/Dockerfile   # so it can COPY parent pom.xml + common-lib
-    ports:
-      - "8087:8087"
-    environment:
-      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
-      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/easyshop
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://service-discovery:8761/eureka/
-      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
-    networks: [ easyshop-network ]
-    depends_on:
-      service-discovery:
-        condition: service_healthy
-      keycloak:
-        condition: service_started
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8087/actuator/health" ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s   # JVM + Flyway migration needs warm-up time before passing
-
-  # ── PostgreSQL ─────────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine    # Alpine = minimal image, ~80MB vs ~400MB full
+    image: postgres:16-alpine
+    ports: ["5432:5432"]
+    mem_limit: 256m
     environment:
       POSTGRES_USER: easyshop
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: easyshop
-    ports:
-      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d  # init scripts per service DB
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
     networks: [easyshop-network]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U easyshop"]
@@ -271,16 +129,22 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── MySQL ──────────────────────────────────────────────────────────────
   mysql:
     image: mysql:8.3
+    # performance-schema=OFF alone saves ~150-200 MB of instrumentation
+    # memory you will never look at in dev. Buffer pool pinned small and
+    # explicit rather than left to grow.
+    command: >
+      --performance-schema=OFF
+      --innodb-buffer-pool-size=128M
+      --table-definition-cache=400
+    ports: ["3306:3306"]
+    mem_limit: 448m
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_USER: easyshop
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_DATABASE: easyshop
-    ports:
-      - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d
@@ -291,50 +155,66 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Redis (Cluster mode for production-like config) ───────────────────
   redis:
     image: redis:7.2-alpine
-    ports:
-      - "6379:6379"
+    # maxmemory trimmed 512m -> 128m: dev cart/cache/idempotency data is
+    # tiny. appendonly added because cart-service uses Redis as PRIMARY
+    # store (Phase 8) - AOF bounds crash loss to ~1s vs RDB's ~60s.
     command: >
       redis-server
-      --maxmemory 512mb
+      --maxmemory 128mb
       --maxmemory-policy allkeys-lru
-      --save 60 1
+      --appendonly yes
+      --appendfsync everysec
       --requirepass ${REDIS_PASSWORD}
+    ports: ["6379:6379"]
+    mem_limit: 160m
+    # REDIS_PASSWORD must exist as a CONTAINER env var for the healthcheck:
+    # the $$ escape below defers expansion to the container's shell at probe
+    # time, and without this line the container env had nothing to expand -
+    # redis-cli authed with an empty password, never got PONG, and a
+    # perfectly healthy Redis was branded unhealthy forever. (The single-$
+    # form in command: is expanded by Compose from .env at parse time -
+    # two different expansion moments, the root cause of the original bug.)
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - redis-data:/data
     networks: [easyshop-network]
     healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
 
-  # ── Kafka + Zookeeper ─────────────────────────────────────────────────
-  # Design note: In production, Kafka uses KRaft mode (no Zookeeper).
-  # We use Zookeeper here because most tutorials use it and it's stable.
-  # You should learn KRaft for interview knowledge.
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    networks: [easyshop-network]
-
+  # ── Kafka in KRaft mode: ZOOKEEPER IS GONE (one whole JVM saved) ──────────
+  # The broker is its own controller (KAFKA_PROCESS_ROLES). CLUSTER_ID is any
+  # base64 UUID; cp-kafka formats an EMPTY data dir automatically on first
+  # boot when it's set. Config below is the standard cp-kafka 7.x KRaft
+  # single-node recipe - verify against Confluent's docs if startup complains.
   kafka:
     image: confluentinc/cp-kafka:7.6.1
-    depends_on: [zookeeper]
-    ports:
-      - "9092:9092"
+    ports: ["9092:9092"]
+    mem_limit: 512m
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      # Two listeners: one for internal Docker network, one for host machine
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1    # 1 for dev; 3 in production
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'      # Explicit topic creation only
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      # Confluent images default to a 1 GB heap - this line alone is a
+      # ~750 MB saving. 256m is comfortable for a dev broker.
+      KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     networks: [easyshop-network]
     healthcheck:
       test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
@@ -342,21 +222,11 @@ services:
       timeout: 10s
       retries: 10
 
-  # ── Kafka UI (extremely useful during development) ────────────────────
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    depends_on: [kafka]
-    ports:
-      - "9090:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-    networks: [easyshop-network]
-
-  # ── Keycloak (OAuth2 + OIDC auth server) ──────────────────────────────
   keycloak:
     image: quay.io/keycloak/keycloak:24.0.5
-    command: start-dev --import-realm   # dev mode; production uses start
+    command: start-dev --import-realm
+    ports: ["8090:8080"]
+    mem_limit: 640m
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -364,28 +234,208 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Pin the issuer Keycloak stamps into every token. Without this, dev
+      # mode's default dynamic hostname resolution derives `iss` from
+      # whatever Host header the caller used - localhost:8090 for anything
+      # hitting the mapped host port (verify-e2e.sh, a browser), keycloak:
+      # 8080 for anything inside the compose network. Every backend service
+      # validates JWTs against issuer-uri=http://keycloak:8080/realms/...,
+      # so a token minted with iss=localhost:8090 fails issuer validation
+      # and gets silently 401'd. KC_HOSTNAME_URL (not KC_HOSTNAME, which
+      # only takes a bare hostname) plus strict mode pins `iss` to a
+      # constant value regardless of which path the token was requested
+      # through.
+      KC_HOSTNAME_URL: http://keycloak:8080
+      KC_HOSTNAME_STRICT: "true"
+      # Keycloak's own JVM would otherwise also claim 25% of host RAM.
+      # No -XX:+UseSerialGC here: kc.sh's own default JAVA_OPTS already bakes
+      # in -XX:+UseParallelGC, and JAVA_OPTS_APPEND appends rather than
+      # replaces - two GC flags on one command line is a fatal VM error
+      # ("Multiple garbage collectors selected"), not a silent override.
+      JAVA_OPTS_APPEND: "-Xms128m -Xmx384m"
     volumes:
       - ./docker/keycloak/realms:/opt/keycloak/data/import
-    ports:
-      - "8090:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres: { condition: service_healthy }
     networks: [easyshop-network]
 
-  # ── Observability Stack ───────────────────────────────────────────────
+  # ═══════════════════════ DOMAIN SERVICES ══════════════════════════════════
+  # Limits are sized by dependency weight: Kafka+JPA services get 384m,
+  # JPA-or-cache services 352m, Redis-only services 288m.
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    ports: ["8081:8081"]
+    mem_limit: 320m
+    environment:
+      <<: *spring_env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_user
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
+    depends_on:
+      postgres: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  order-service:
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    ports: ["8082:8082"]
+    mem_limit: 384m
+    environment:
+      <<: *spring_env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_order
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: services/payment-service/Dockerfile
+    ports: ["8083:8083"]
+    mem_limit: 384m
+    environment:
+      <<: *spring_env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_payment
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    ports: ["8084:8084"]
+    mem_limit: 384m
+    environment:
+      <<: *spring_env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easyshop_inventory?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: easyshop
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      mysql: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    ports: ["8085:8085"]
+    mem_limit: 352m
+    environment:
+      <<: *spring_env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easyshop_catalog?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: easyshop
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  review-service:
+    build:
+      context: .
+      dockerfile: services/review-service/Dockerfile
+    ports: ["8086:8086"]
+    mem_limit: 352m
+    environment:
+      <<: *spring_env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easyshop_review?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: easyshop
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
+    depends_on:
+      mysql: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  cart-service:
+    build:
+      context: .
+      dockerfile: services/cart-service/Dockerfile
+    ports: ["8087:8087"]
+    mem_limit: 288m
+    environment:
+      <<: *spring_env
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
+    depends_on:
+      redis: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    ports: ["8088:8088"]
+    mem_limit: 288m
+    environment:
+      <<: *spring_env
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+    depends_on:
+      kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      service-discovery: { condition: service_started }
+    networks: [easyshop-network]
+
+  # ═══════════════════ ON-DEMAND TOOLS (profiles) ═══════════════════════════
+  # Not started by default. Start with:
+  #   docker compose --profile tools up -d          (Kafka UI)
+  #   docker compose --profile observability up -d  (Prometheus + Grafana)
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    profiles: ["tools"]
+    ports: ["9090:8080"]
+    mem_limit: 384m
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+    depends_on: [kafka]
+    networks: [easyshop-network]
+
   prometheus:
     image: prom/prometheus:v2.52.0
+    profiles: ["observability"]
+    ports: ["9091:9090"]
+    mem_limit: 256m
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9091:9090"
     networks: [easyshop-network]
 
   grafana:
     image: grafana/grafana:10.4.3
-    ports:
-      - "3000:3000"
+    profiles: ["observability"]
+    ports: ["3000:3000"]
+    mem_limit: 192m
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
     volumes:
@@ -393,9 +443,3 @@ services:
       - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources
     networks: [easyshop-network]
-
-volumes:
-  postgres-data:
-  mysql-data:
-  redis-data:
-  grafana-data:

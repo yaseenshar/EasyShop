@@ -2,6 +2,7 @@ package com.easyshop.catalog.service;
 
 import com.easyshop.catalog.config.CacheConfig;
 import com.easyshop.catalog.dto.ProductDtos.CreateProductRequest;
+import com.easyshop.catalog.dto.ProductDtos.PagedResponse;
 import com.easyshop.catalog.dto.ProductDtos.ProductResponse;
 import com.easyshop.catalog.dto.ProductDtos.UpdateProductRequest;
 import com.easyshop.catalog.entity.Product;
@@ -62,19 +63,27 @@ public class ProductService {
      * Listings are cached per (category, page, size) tuple. Two rules keep
      * this sane: (1) only cache the FIRST few pages - page 47 of a category
      * is requested so rarely that caching it just fills Redis with dead
-     * entries (that's the unless-condition), and (2) the short 2-minute TTL
-     * from CacheConfig bounds staleness instead of trying to evict every
-     * affected page tuple on every product change, which is unwinnable.
+     * entries, and (2) the short 2-minute TTL from CacheConfig bounds
+     * staleness instead of trying to evict every affected page tuple on
+     * every product change, which is unwinnable.
+     *
+     * condition (not unless) for rule (1): Spring's caching abstraction
+     * throws IllegalStateException if sync=true is combined with unless
+     * (unless needs the post-invocation #result, which is incompatible
+     * with the lock-based get-or-compute semantics of sync). condition is
+     * evaluated pre-invocation from the method args only, which is all
+     * "only cache page <= 3" actually needs, and IS supported with sync.
      */
     @Cacheable(cacheNames = CacheConfig.PRODUCT_LISTINGS_CACHE,
             key = "#categoryId + ':' + #page + ':' + #size",
-            unless = "#page > 3",
+            condition = "#page <= 3",
             sync = true)
     @Transactional(readOnly = true)
-    public Page<ProductResponse> listByCategory(UUID categoryId, int page, int size) {
-        return productRepository
+    public PagedResponse<ProductResponse> listByCategory(UUID categoryId, int page, int size) {
+        Page<ProductResponse> result = productRepository
                 .findByCategoryIdAndActiveTrue(categoryId, PageRequest.of(page, size))
                 .map(ProductResponse::from);
+        return PagedResponse.from(result);
     }
 
     @Transactional

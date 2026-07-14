@@ -12,6 +12,7 @@ COPY services/inventory-service/pom.xml services/inventory-service/pom.xml
 COPY services/catalog-service/pom.xml services/catalog-service/pom.xml
 COPY services/review-service/pom.xml services/review-service/pom.xml
 COPY services/notification-service/pom.xml services/notification-service/pom.xml
+COPY services/cart-service/pom.xml services/cart-service/pom.xml
 # Copy only the sources needed for this module and its dependencies
 COPY common/common-lib/src common/common-lib/src
 COPY services/notification-service/src services/notification-service/src
@@ -22,5 +23,5 @@ FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache curl
 WORKDIR /app
 COPY --from=build /app/services/notification-service/target/*.jar app.jar
-EXPOSE 8087
+EXPOSE 8088
 ENTRYPOINT ["java", "-jar", "app.jar"]

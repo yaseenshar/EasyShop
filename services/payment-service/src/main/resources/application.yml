@@ -48,6 +48,12 @@ spring:
     listener:
       ack-mode: manual_immediate
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8090/realms/easyshop
+
 eureka:
   client:
     service-url:

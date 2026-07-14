@@ -1,5 +1,5 @@
 server:
-  port: 8087
+  port: 8086
 
 spring:
   application:
@@ -7,7 +7,7 @@ spring:
 
   datasource:
     # Per-service isolated database - review gets its own MySQL database.
-    url: jdbc:mysql://localhost:3306/easyshop_review?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/easyshop_review?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: easyshop
     password: ${MYSQL_PASSWORD}
     hikari:

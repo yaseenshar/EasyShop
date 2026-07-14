@@ -40,8 +40,12 @@ public class StockReservationService {
     @Transactional
     public ReservationOutcome reserve(UUID orderId, UUID productId, int quantity) {
 
-        ProductStock stock = stockRepository.findByProductId(productId)
-                .orElseThrow( () -> new IllegalArgumentException("Product not found: " + productId));
+        var stockOpt = stockRepository.findByProductId(productId);
+        if (stockOpt.isEmpty()) {
+            log.warn("Product not found for reservation: {}", productId);
+            return new ReservationOutcome(false, null, "Product not found: " + productId);
+        }
+        ProductStock stock = stockOpt.get();
 
         if (!stock.tryReserve(quantity)) {
             log.info("Insufficient stock for productId: {} (requested {}, available {})" , productId, quantity, stock.getAvailableQty());

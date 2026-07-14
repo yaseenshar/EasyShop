@@ -15,13 +15,13 @@ COPY services/notification-service/pom.xml services/notification-service/pom.xml
 COPY services/cart-service/pom.xml services/cart-service/pom.xml
 # Copy only the sources needed for this module and its dependencies
 COPY common/common-lib/src common/common-lib/src
-COPY services/inventory-service/src services/inventory-service/src
+COPY services/cart-service/src services/cart-service/src
 
-RUN mvn package -pl services/inventory-service -am -DskipTests
+RUN mvn package -pl services/cart-service -am -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache curl
 WORKDIR /app
-COPY --from=build /app/services/inventory-service/target/*.jar app.jar
-EXPOSE 8084
+COPY --from=build /app/services/cart-service/target/*.jar app.jar
+EXPOSE 8087
 ENTRYPOINT ["java", "-jar", "app.jar"]
