@@ -223,41 +223,49 @@ services:
       retries: 10
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0.5
+    image: quay.io/keycloak/keycloak:26.7.0
     command: start-dev --import-realm
-    ports: ["8090:8080"]
+    ports:
+      - "8090:8080"    # admin console + OIDC endpoints
+      - "9000:9000"    # management interface: /health, /metrics (KC 25+)
     mem_limit: 640m
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: easyshop
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      # Pin the issuer Keycloak stamps into every token. Without this, dev
-      # mode's default dynamic hostname resolution derives `iss` from
-      # whatever Host header the caller used - localhost:8090 for anything
-      # hitting the mapped host port (verify-e2e.sh, a browser), keycloak:
-      # 8080 for anything inside the compose network. Every backend service
-      # validates JWTs against issuer-uri=http://keycloak:8080/realms/...,
-      # so a token minted with iss=localhost:8090 fails issuer validation
-      # and gets silently 401'd. KC_HOSTNAME_URL (not KC_HOSTNAME, which
-      # only takes a bare hostname) plus strict mode pins `iss` to a
-      # constant value regardless of which path the token was requested
-      # through.
-      KC_HOSTNAME_URL: http://keycloak:8080
-      KC_HOSTNAME_STRICT: "true"
-      # Keycloak's own JVM would otherwise also claim 25% of host RAM.
-      # No -XX:+UseSerialGC here: kc.sh's own default JAVA_OPTS already bakes
-      # in -XX:+UseParallelGC, and JAVA_OPTS_APPEND appends rather than
-      # replaces - two GC flags on one command line is a fatal VM error
-      # ("Multiple garbage collectors selected"), not a silent override.
+
+      KEYCLOAK_GATEWAY_CLIENT_SECRET: ${KEYCLOAK_GATEWAY_CLIENT_SECRET}
+      KEYCLOAK_REVIEW_SERVICE_CLIENT_SECRET: ${KEYCLOAK_REVIEW_SERVICE_CLIENT_SECRET}
+      # RENAMED in KC 26 (old KEYCLOAK_ADMIN vars are deprecated/removed):
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Health + metrics on management port 9000:
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      # JVM caps from the memory-optimization phase, unchanged:
       JAVA_OPTS_APPEND: "-Xms128m -Xmx384m"
     volumes:
       - ./docker/keycloak/realms:/opt/keycloak/data/import
     depends_on:
       postgres: { condition: service_healthy }
-    networks: [easyshop-network]
+    networks: [ easyshop-network ]
+    healthcheck:
+      # The KC image (UBI base) ships no curl/wget but DOES ship bash, so
+      # the /dev/tcp trick that failed on our slim app images works here -
+      # upgraded to a real HTTP GET against /health/ready on the mgmt port
+      # and grepping the response for UP. Community-standard recipe;
+      # verify once with `docker inspect --format='{{json .State.Health}}'`.
+      test:
+        - CMD-SHELL
+        - >
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          echo -e "GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          cat <&3 | grep -q '"status": *"UP"'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
 
   # ═══════════════════════ DOMAIN SERVICES ══════════════════════════════════
   # Limits are sized by dependency weight: Kafka+JPA services get 384m,
