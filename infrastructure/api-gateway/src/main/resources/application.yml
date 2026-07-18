@@ -7,20 +7,18 @@ spring:
 
   cloud:
     gateway:
-      # NOTE: as of Spring Cloud Gateway 5.x (spring-cloud-starter-gateway-
-      # server-webflux), route/CORS/filter config lives under
-      # spring.cloud.gateway.server.webflux.* - the classic
-      # spring.cloud.gateway.* prefix (routes/default-filters/globalcors
-      # directly under "gateway") is silently ignored, which registers ZERO
-      # routes and makes every request 404 at the fallback handler.
+      # Spring Cloud Gateway 5.x (spring-cloud-starter-gateway-server-webflux)
+      # moved route/CORS/filter config under spring.cloud.gateway.server.webflux.*
+      # The classic spring.cloud.gateway.* prefix is SILENTLY IGNORED -
+      # zero routes registered, every request 404s, no error logged.
       server:
         webflux:
           globalcors:
             cors-configurations:
               '[/**]':
                 allowedOrigins:
-                  - "http://localhost:4200"   # Angular dev server
-                  - "https://easyshop.com"    # Production
+                  - "http://localhost:4200"
+                  - "https://easyshop.com"
                 allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
                 allowedHeaders: ["*"]
                 allowCredentials: true
@@ -34,67 +32,69 @@ spring:
                 redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
+            # NO TokenRelay: that filter relays an OAuth2AuthorizedClient and
+            # requires the gateway to be an OAuth2 CLIENT (login flow). This
+            # gateway is a RESOURCE SERVER - the SPA holds the token and sends
+            # it as a Bearer header, which Gateway forwards downstream
+            # unchanged by default. TokenRelay here would be a no-op or error.
 
           routes:
-            # ── PUBLIC ROUTES - the complete, deliberate list ────────────────
-            # REFACTORED from Phase 1: payment-service route REMOVED (it is
-            # Kafka-driven only; a public route was attack surface with no
-            # legitimate caller). inventory-service and notification-service
-            # were never routed and stay that way. review-service ADDED (built
-            # after the original config). Internal paths (/internal/**) are
-            # unreachable by construction: no route's Path predicate matches
-            # them, so order-service's purchase-check endpoint is
-            # service-to-service only.
+            # AUTHENTICATION IS NO LONGER A PER-ROUTE FILTER.
+            # The deleted AuthenticationFilter verified with HMAC
+            # (Keys.hmacShaKeyFor) while Keycloak signs RS256 - it rejected
+            # every real token. Authentication now happens once, centrally,
+            # in GatewaySecurityConfig's SecurityWebFilterChain (public paths
+            # permitted there, everything else authenticated). Routes here do
+            # routing only - one concern per layer.
 
             - id: user-service
               uri: lb://user-service
               predicates:
                 - Path=/api/v1/users/**
-              filters:
-                - name: AuthenticationFilter
 
             - id: catalog-service
               uri: lb://catalog-service
               predicates:
                 - Path=/api/v1/products/**,/api/v1/categories/**
-              # No AuthenticationFilter: catalog browsing is anonymous by
-              # design (rate-limited by IP via the default filter's key
-              # resolver fallback). Writes are protected downstream by
-              # catalog-service's own resource-server config - defense in
-              # depth means the gateway filter is a convenience layer, never
-              # the only gate.
 
             - id: order-service
               uri: lb://order-service
               predicates:
                 - Path=/api/v1/orders/**
-              filters:
-                - name: AuthenticationFilter
 
             - id: cart-service
               uri: lb://cart-service
               predicates:
                 - Path=/api/v1/cart/**
-              filters:
-                - name: AuthenticationFilter
 
             - id: review-service
               uri: lb://review-service
               predicates:
                 - Path=/api/v1/reviews/**
-              # No gateway auth filter: GET endpoints (product reviews,
-              # rating summaries) are public reads; review-service's own
-              # SecurityConfig enforces auth on submission and ADMIN on
-              # moderation. The gateway stays out of per-method decisions -
-              # path-level routing here, method-level authorization there.
+
+            # Still deliberately UNROUTED: payment-service and
+            # inventory-service (Kafka-driven only), notification-service
+            # (no API at all). /internal/** matches no predicate, so
+            # order-service's purchase-check stays service-to-service.
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ${REDIS_PASSWORD}
 
   security:
     oauth2:
       resourceserver:
         jwt:
-          # Spring Boot auto-discovers the JWKS endpoint from this issuer's
-          # /.well-known/openid-configuration - no manual key management needed.
           issuer-uri: http://localhost:8090/realms/easyshop
+          jwk-set-uri: http://localhost:8090/realms/easyshop/protocol/openid-connect/certs
+          # ISSUER MISMATCH TRAP: iss is compared as an exact string. Tokens
+          # minted via localhost:8090 carry iss=http://localhost:8090/...
+          # If the gateway runs in Docker and uses http://keycloak:8080/...
+          # here, validation fails despite everything else being correct.
+          # Fix: set KC_HOSTNAME on Keycloak so iss is stable on both paths.
+          audiences: [easyshop-api]
 
 eureka:
   client:
@@ -106,10 +106,9 @@ management:
     web:
       exposure:
         include: health,info,prometheus,gateway
-  # Being in exposure.include isn't enough on its own - each endpoint has
-  # its own default Access level, and "gateway" (route introspection)
-  # defaults to "none" (fully disabled) since it's more sensitive than
-  # health/info. Needs an explicit grant to actually be reachable.
   endpoint:
     gateway:
+      # Exposure alone is insufficient - the gateway endpoint's default
+      # access level is "none" because route introspection is more
+      # sensitive than health/info. Needs this explicit grant.
       access: unrestricted
