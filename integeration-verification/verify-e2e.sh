@@ -4,9 +4,26 @@
 # Run AFTER: docker compose up + all 8 services started.
 # Requires: curl, jq  (sudo apt install jq / brew install jq)
 # chmod +x verify-e2e.sh
-# Usage: REDIS_PASSWORD=change-me-in-production KEYCLOAK_GATEWAY_CLIENT_SECRET=change-me-in-production ./verify-e2e.sh
+# No env required for a standard local checkout - KEYCLOAK_GATEWAY_CLIENT_SECRET
+# is read from .env automatically. Override it (or TEST_PASS) to point at a
+# different realm/client.
 # =============================================================================
 set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$SCRIPT_DIR/.env" ] && { set -a; source "$SCRIPT_DIR/.env"; set +a; }
+# Guard against copy-pasting INSTALL.md's example line verbatim (angle
+# brackets and all) into a shell that then stays open - see the identical
+# guard in resource-server-hardening/verify-token-relay.sh for the story.
+case "${TEST_PASS:-}" in
+  \<*\>)
+    echo "[diag] WARNING: \$TEST_PASS is set to a literal placeholder ('${TEST_PASS}') - probably pasted from INSTALL.md. Unsetting it so the real default applies." >&2
+    unset TEST_PASS
+    ;;
+esac
+KEYCLOAK_GATEWAY_CLIENT_SECRET="${KEYCLOAK_GATEWAY_CLIENT_SECRET:-}"
+TEST_PASS="${TEST_PASS:-Customer#Pass1}"
+echo "[diag] script: ${BASH_SOURCE[0]:-<none, not running under bash>} | .env at: $SCRIPT_DIR/.env exists=$( [ -f "$SCRIPT_DIR/.env" ] && echo yes || echo NO ) | KEYCLOAK_GATEWAY_CLIENT_SECRET is $( [ -n "$KEYCLOAK_GATEWAY_CLIENT_SECRET" ] && echo "set (${#KEYCLOAK_GATEWAY_CLIENT_SECRET} chars)" || echo EMPTY )" >&2
 
 GATEWAY="http://localhost:8080"
 EUREKA="http://localhost:8761"
@@ -51,7 +68,7 @@ TOKEN=$(curl -s -X POST \
   "$KEYCLOAK/realms/easyshop/protocol/openid-connect/token" \
   -d "client_id=easyshop-gateway" \
   -d "client_secret=${KEYCLOAK_GATEWAY_CLIENT_SECRET}" \
-  -d "username=demo.customer" -d "password=Passw0rd!" \
+  -d "username=demo.customer" -d "password=${TEST_PASS}" \
   -d "grant_type=password" | jq -r '.access_token')
 
 [ "$TOKEN" != "null" ] && [ -n "$TOKEN" ] \

@@ -110,6 +110,7 @@ services:
       <<: [*spring_env, *oidc]
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      GATEWAY_BFF_CLIENT_SECRET: ${GATEWAY_BFF_CLIENT_SECRET}
     depends_on:
       service-discovery: { condition: service_started }
       redis: { condition: service_healthy }
@@ -238,6 +239,13 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: easyshop
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Public issuer — matches the URL browsers and host-side scripts use
+      # (host port 8090 -> container 8080).
+      KC_HOSTNAME: "http://localhost:8090"
+      # Intent: allow backchannel (container-to-container) requests on
+      # http://keycloak:8080 to keep working while the issuer stays pinned
+      # to the public URL above.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
 
       KEYCLOAK_GATEWAY_CLIENT_SECRET: ${KEYCLOAK_GATEWAY_CLIENT_SECRET}
       KEYCLOAK_REVIEW_SERVICE_CLIENT_SECRET: ${KEYCLOAK_REVIEW_SERVICE_CLIENT_SECRET}
