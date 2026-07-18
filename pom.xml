@@ -116,6 +116,26 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!-- JDK 23+ deprecated implicit (unconfigured) annotation processor
+                     discovery on the classpath, and newer JDKs (e.g. 25) no longer run
+                     it at all unless processors are explicitly declared. Without this,
+                     Lombok silently stops generating getters/setters when building with
+                     a JDK newer than what the project targets (release 21), even though
+                     lombok is on the compile classpath. Declaring it explicitly here
+                     makes annotation processing work regardless of the build JDK. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
                 <!-- Jib plugin — builds Docker images without a Docker daemon -->
                 <plugin>
                     <groupId>com.google.cloud.tools</groupId>
