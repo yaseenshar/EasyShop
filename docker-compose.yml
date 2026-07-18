@@ -42,6 +42,11 @@ x-jvm-opts: &jvm_opts >-
   -XX:TieredStopAtLevel=1
   -XX:+ExitOnOutOfMemoryError
 
+x-oidc: &oidc
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:8090/realms/easyshop
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/easyshop/protocol/openid-connect/certs
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: easyshop-api
+
 # Spring-level trims, merged into each service's environment:
 #   Tomcat 200 -> 20 max threads (stacks + churn), Hikari 10 -> 5 connections.
 #   Harmlessly ignored by services without Tomcat (gateway/Netty) or without
@@ -102,10 +107,9 @@ services:
     ports: ["8080:8080"]
     mem_limit: 384m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
     depends_on:
       service-discovery: { condition: service_started }
       redis: { condition: service_healthy }
@@ -278,10 +282,9 @@ services:
     ports: ["8081:8081"]
     mem_limit: 320m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_user
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
     depends_on:
       postgres: { condition: service_healthy }
       service-discovery: { condition: service_started }
@@ -294,11 +297,10 @@ services:
     ports: ["8082:8082"]
     mem_limit: 384m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_order
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
     depends_on:
       postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
@@ -312,13 +314,12 @@ services:
     ports: ["8083:8083"]
     mem_limit: 384m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_payment
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
     depends_on:
       postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
@@ -333,7 +334,7 @@ services:
     ports: ["8084:8084"]
     mem_limit: 384m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easyshop_inventory?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: easyshop
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
@@ -351,7 +352,7 @@ services:
     ports: ["8085:8085"]
     mem_limit: 352m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easyshop_catalog?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: easyshop
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
@@ -370,11 +371,10 @@ services:
     ports: ["8086:8086"]
     mem_limit: 352m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easyshop_review?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: easyshop
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
     depends_on:
       mysql: { condition: service_healthy }
       service-discovery: { condition: service_started }
@@ -387,10 +387,9 @@ services:
     ports: ["8087:8087"]
     mem_limit: 288m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/easyshop
     depends_on:
       redis: { condition: service_healthy }
       service-discovery: { condition: service_started }
@@ -403,7 +402,7 @@ services:
     ports: ["8088:8088"]
     mem_limit: 288m
     environment:
-      <<: *spring_env
+      <<: [*spring_env, *oidc]
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}

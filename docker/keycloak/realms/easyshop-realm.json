@@ -2,36 +2,42 @@
   "realm": "easyshop",
   "enabled": true,
   "displayName": "EasyShop",
-
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,
   "loginWithEmailAllowed": true,
   "resetPasswordAllowed": true,
   "verifyEmail": false,
-
   "accessTokenLifespan": 900,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
   "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
-
   "bruteForceProtected": true,
   "failureFactor": 5,
   "waitIncrementSeconds": 60,
   "maxFailureWaitSeconds": 900,
   "maxDeltaTimeSeconds": 43200,
-
   "passwordPolicy": "length(10) and notUsername and passwordHistory(3)",
-
   "roles": {
     "realm": [
-      { "name": "CUSTOMER", "description": "Standard shopper" },
-      { "name": "VENDOR", "description": "Sells products on EasyShop" },
-      { "name": "ADMIN", "description": "Platform administrator" },
-      { "name": "SERVICE", "description": "Machine-to-machine service account (client credentials)" }
+      {
+        "name": "CUSTOMER",
+        "description": "Standard shopper"
+      },
+      {
+        "name": "VENDOR",
+        "description": "Sells products on EasyShop"
+      },
+      {
+        "name": "ADMIN",
+        "description": "Platform administrator"
+      },
+      {
+        "name": "SERVICE",
+        "description": "Machine-to-machine service account (client credentials)"
+      }
     ]
   },
-
   "clients": [
     {
       "clientId": "easyshop-angular",
@@ -42,8 +48,12 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:4200/*"],
-      "webOrigins": ["http://localhost:4200"],
+      "redirectUris": [
+        "http://localhost:4200/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4200"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "http://localhost:4200/*"
@@ -59,7 +69,9 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
-      "redirectUris": ["http://localhost:8080/*"],
+      "redirectUris": [
+        "http://localhost:8080/*"
+      ],
       "attributes": {
         "_comment": "directAccessGrantsEnabled=true is a DEV-ONLY concession so curl test scripts can mint user tokens without a browser. Disable outside local - ROPC is removed in OAuth 2.1."
       }
@@ -79,37 +91,7 @@
       }
     }
   ],
-
   "scopeMappings": [],
-
-  "clientScopes": [
-    {
-      "name": "easyshop-roles",
-      "description": "Maps realm roles into the flat 'roles' claim consumed by all EasyShop resource servers",
-      "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "false" },
-      "protocolMappers": [
-        {
-          "name": "realm-roles-mapper",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-realm-role-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "roles",
-            "jsonType.label": "String",
-            "multivalued": "true",
-            "id.token.claim": "true",
-            "access.token.claim": "true",
-            "userinfo.token.claim": "true"
-          }
-        }
-      ]
-    }
-  ],
-  "defaultDefaultClientScopes": [
-    "profile", "email", "roles", "web-origins", "acr", "basic", "easyshop-roles"
-  ],
-
   "users": [
     {
       "username": "demo.customer",
@@ -119,9 +101,15 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "Customer#Pass1", "temporary": false }
+        {
+          "type": "password",
+          "value": "Customer#Pass1",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["CUSTOMER"]
+      "realmRoles": [
+        "CUSTOMER"
+      ]
     },
     {
       "username": "demo.vendor",
@@ -131,9 +119,16 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "Vendor#Pass12", "temporary": false }
+        {
+          "type": "password",
+          "value": "Vendor#Pass12",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["CUSTOMER", "VENDOR"]
+      "realmRoles": [
+        "CUSTOMER",
+        "VENDOR"
+      ]
     },
     {
       "username": "demo.admin",
@@ -143,15 +138,24 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "Admin#Pass123", "temporary": false }
+        {
+          "type": "password",
+          "value": "Admin#Pass123",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["CUSTOMER", "ADMIN"]
+      "realmRoles": [
+        "CUSTOMER",
+        "ADMIN"
+      ]
     },
     {
       "username": "service-account-easyshop-review-service",
       "enabled": true,
       "serviceAccountClientId": "easyshop-review-service",
-      "realmRoles": ["SERVICE"]
+      "realmRoles": [
+        "SERVICE"
+      ]
     }
   ]
 }

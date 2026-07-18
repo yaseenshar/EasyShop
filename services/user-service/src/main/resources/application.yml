@@ -42,6 +42,7 @@ spring:
           # Spring Boot auto-discovers the JWKS endpoint from this issuer's
           # /.well-known/openid-configuration - no manual key management needed.
           issuer-uri: http://localhost:8090/realms/easyshop
+          jwk-set-uri: http://localhost:8090/realms/easyshop/protocol/openid-connect/certs
 
 eureka:
   client:
