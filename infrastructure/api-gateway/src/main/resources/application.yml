@@ -25,6 +25,8 @@ spring:
                 maxAge: 3600
 
           default-filters:
+            - TokenRelay=
+            - RemoveRequestHeader=Cookie
             - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
             - name: RequestRateLimiter
               args:
@@ -85,6 +87,41 @@ spring:
 
   security:
     oauth2:
+      client:
+        provider:
+          keycloak:
+            # DELIBERATELY NO issuer-uri HERE.
+            # On the client side, issuer-uri triggers OIDC discovery AT STARTUP,
+            # FROM INSIDE THE CONTAINER — where localhost:8090 does not resolve.
+            # The gateway would crash-loop. Endpoints are configured manually,
+            # split by caller (README §3):
+            authorization-uri: http://localhost:8090/realms/easyshop/protocol/openid-connect/auth   # the BROWSER is redirected here
+            token-uri: http://keycloak:8080/realms/easyshop/protocol/openid-connect/token   # the GATEWAY CONTAINER calls these
+            jwk-set-uri: http://keycloak:8080/realms/easyshop/protocol/openid-connect/certs
+            user-info-uri: http://keycloak:8080/realms/easyshop/protocol/openid-connect/userinfo
+            # Pinned to sub so session principals and bearer principals name
+            # themselves identically -> ONE rate-limit bucket per human
+            # (see RateLimiterConfig.java). Changing this silently splits buckets.
+            user-name-attribute: sub
+
+        registration:
+          keycloak:
+            client-id: easyshop-gateway-bff
+            client-secret: ${GATEWAY_BFF_CLIENT_SECRET}
+            authorization-grant-type: authorization_code
+            # Resolves to http://localhost:8080/login/oauth2/code/keycloak —
+            # must match the redirect URI registered by
+            # provision-gateway-bff-client.sh exactly.
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            # profile/email are NOT requested: this realm's import declared its
+            # own "clientScopes" array, which replaces Keycloak's built-in set
+            # rather than extending it — profile/email/basic were never created
+            # (see add-sub-mapper.sh). Requesting them 400s with invalid_scope.
+            # openid alone is enough: easyshop-api-audience is a DEFAULT scope
+            # on this client (always included, no need to request it), and the
+            # gateway/downstream services only ever read sub + roles.
+            scope: openid
+
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8090/realms/easyshop
