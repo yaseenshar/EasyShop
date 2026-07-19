@@ -126,7 +126,6 @@
         }
       ],
       "realmRoles": [
-        "CUSTOMER",
         "VENDOR"
       ]
     },
@@ -145,7 +144,6 @@
         }
       ],
       "realmRoles": [
-        "CUSTOMER",
         "ADMIN"
       ]
     },

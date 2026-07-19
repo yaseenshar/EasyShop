@@ -30,7 +30,7 @@ public class ProductController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<PagedResponse<ProductResponse>>> listByCategory(
-            @RequestParam UUID categoryId,
+            @RequestParam(required = false) UUID categoryId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(

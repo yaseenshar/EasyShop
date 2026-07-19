@@ -4,6 +4,7 @@ import com.easyshop.order.entity.Order;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import org.springframework.data.domain.Page;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,6 +41,20 @@ public final class OrderDtos {
                     order.getCurrency(),
                     order.getCreatedAt()
             );
+        }
+    }
+
+    public record PagedResponse<T>(
+            List<T> content,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages
+    ) {
+        public static <T> PagedResponse<T> from(Page<T> page) {
+            return new PagedResponse<>(
+                    page.getContent(), page.getNumber(), page.getSize(),
+                    page.getTotalElements(), page.getTotalPages());
         }
     }
 }

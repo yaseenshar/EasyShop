@@ -12,6 +12,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
@@ -56,5 +58,15 @@ public class UserController {
             @Valid @RequestBody UpdateProfileRequest request) {
         UserResponse response = userService.updateProfile(jwt.getSubject(), request);
         return ResponseEntity.ok(ApiResponse.success("Profile updated", response));
+    }
+
+    /**
+     * Admin surface (see SecurityConfig: /api/v1/users/** is ADMIN-only) for
+     * looking up any user by their internal id - not the Keycloak subject.
+     */
+    @GetMapping("/{userId}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable UUID userId) {
+        UserResponse response = userService.getUserById(userId);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

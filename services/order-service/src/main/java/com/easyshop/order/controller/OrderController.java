@@ -3,14 +3,17 @@ package com.easyshop.order.controller;
 import com.easyshop.common.dto.response.ApiResponse;
 import com.easyshop.order.dto.OrderDtos.CreateOrderRequest;
 import com.easyshop.order.dto.OrderDtos.OrderResponse;
+import com.easyshop.order.dto.OrderDtos.PagedResponse;
 import com.easyshop.order.entity.Order;
 import com.easyshop.order.entity.OrderSagaState;
 import com.easyshop.order.repository.OrderRepository;
 import com.easyshop.order.repository.OrderSagaRepository;
 import com.easyshop.order.saga.OrderSagaOrchestrator;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.transaction.annotation.Transactional;
@@ -97,6 +100,26 @@ public class OrderController {
                 .body(ApiResponse.success("Order accepted, processing", OrderResponse.from(order)));
     }
 
+    /**
+     * Own orders only - query-scoped ownership (README §preferred approach):
+     * the WHERE clause does the work, so there is nothing to leak and nothing
+     * to bypass. ADMIN uses a real admin surface if/when "all orders" is needed.
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<PagedResponse<OrderResponse>>> listMyOrders(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        UUID userId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        var result = orderRepository.findByUserId(userId, PageRequest.of(page, Math.min(size, 100)))
+                .map(OrderResponse::from);
+        return ResponseEntity.ok(ApiResponse.success(PagedResponse.from(result)));
+    }
+
+    // Admin bypass + ownership: existence of the id is not leaked to a
+    // non-owner (403, not 404-vs-404) - see OrderAccess javadoc for the
+    // trade-off against query-scoped 404-for-both.
+    @PreAuthorize("hasRole('ADMIN') or @orderAccess.isOwner(#orderId, authentication.name)")
     @GetMapping("/{orderId}")
     public ResponseEntity<ApiResponse<OrderResponse>> getOrder(@PathVariable UUID orderId) {
         Order order = orderRepository.findById(orderId)

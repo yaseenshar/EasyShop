@@ -80,8 +80,10 @@ public class ProductService {
             sync = true)
     @Transactional(readOnly = true)
     public PagedResponse<ProductResponse> listByCategory(UUID categoryId, int page, int size) {
-        Page<ProductResponse> result = productRepository
-                .findByCategoryIdAndActiveTrue(categoryId, PageRequest.of(page, size))
+        PageRequest pageRequest = PageRequest.of(page, size);
+        Page<ProductResponse> result = (categoryId == null
+                ? productRepository.findByActiveTrue(pageRequest)
+                : productRepository.findByCategoryIdAndActiveTrue(categoryId, pageRequest))
                 .map(ProductResponse::from);
         return PagedResponse.from(result);
     }

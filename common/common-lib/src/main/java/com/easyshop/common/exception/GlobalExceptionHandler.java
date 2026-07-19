@@ -7,9 +7,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestValueException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import java.util.stream.Collectors;
 
 /**
@@ -99,5 +104,51 @@ public class GlobalExceptionHandler {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error("An unexpected error occurred", "INTERNAL_ERROR"));
+    }
+
+    /**
+     * Malformed/unparseable request bodies (missing required primitive field,
+     * unparseable JSON, wrong type). A 400, not the catch-all 500 - the client
+     * sent something the server correctly rejected as unreadable.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotReadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error("Malformed request body", "VALIDATION_ERROR"));
+    }
+
+    /**
+     * Missing required @RequestParam/@RequestHeader (e.g. checkout's
+     * Idempotency-Key header omitted). A 400 - the request is malformed,
+     * not the server.
+     */
+    @ExceptionHandler(MissingRequestValueException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingValue(MissingRequestValueException ex) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(ex.getMessage(), "VALIDATION_ERROR"));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponse.error(ex.getMessage(), "METHOD_NOT_ALLOWED"));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+        // 403 = authenticated but not authorized. Keep the message generic:
+        // do not echo which role was required (that's free reconnaissance).
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("Access denied", "FORBIDDEN"));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthentication(AuthenticationException ex) {
+        // Filter-chain authentication failures never reach the advice (the entry
+        // point answers first, with WWW-Authenticate). This covers authentication
+        // exceptions raised later, during controller/service execution — kept for
+        // symmetry so the 401/403 split stays intact end to end.
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error("Authentication required", "UNAUTHORIZED"));
     }
 }

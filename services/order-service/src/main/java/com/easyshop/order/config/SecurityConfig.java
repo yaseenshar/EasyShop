@@ -1,59 +1,76 @@
-package com.easyshop.order.config;
+package com.easyshop.order.config; // align with the service's actual config package
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.stream.Collectors;
-
+/**
+ * order-service RBAC — the service with all three authorization layers:
+ *
+ *   1. URL rules (below): coarse role gates, including /internal/** -> SERVICE,
+ *      which finally closes the ENFORCEMENT half of §8.2 #3. Until now, network
+ *      topology (the gateway not routing /internal/**) was the only protection.
+ *
+ *   2. Method security: admin-or-owner reads —
+ *        @PreAuthorize("hasRole('ADMIN') or @orderAccess.isOwner(#orderId, authentication.name)")
+ *      (see OrderAccess.java; requires the -parameters compiler flag, README traps).
+ *
+ *   3. Query-scoped ownership (PREFERRED for plain customer reads):
+ *        orderRepository.findByIdAndCustomerKeycloakId(orderId, authentication.getName())
+ *            .orElseThrow(OrderNotFoundException::new)
+ *      -> 404 for both "missing" and "not yours"; no existence leak, no SpEL.
+ *
+ * ⚠ SEQUENCING (silent-failure warning): the moment /internal/** requires
+ * SERVICE, review-service's Verified-Purchase call starts failing — and the
+ * §4.12 circuit-breaker fallback HIDES it: every new review quietly lands
+ * UNVERIFIED, zero errors anywhere. Land the review-service M2M token
+ * propagation (§8.2 #3's other half) in the same change, or accept a documented
+ * degradation window and keep verify-rbac.sh section [8] watching for it.
+ * Silent-by-design failures need a test precisely because they are silent.
+ *
+ * DECISION: checkout is CUSTOMER-only. Admins act on orders through admin
+ * surfaces; they do not purchase as ADMIN. Named audiences, not authenticated().
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    private final JwtAuthenticationConverter jwtAuthenticationConverter; // common-lib auto-config
+
+    public SecurityConfig(JwtAuthenticationConverter jwtAuthenticationConverter) {
+        this.jwtAuthenticationConverter = jwtAuthenticationConverter;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/actuator/health/**").permitAll()
+
+                        // Service-to-service surface — machine role only. Humans, including
+                        // ADMIN, are deliberately excluded: an admin token leaking into logs
+                        // must not be a skeleton key for internal APIs.
+                        .requestMatchers("/internal/**").hasRole("SERVICE")
+
+                        // POST /api/v1/orders IS checkout (see OrderController javadoc) -
+                        // there is no separate /checkout sub-path.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/orders").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/orders").hasAnyRole("CUSTOMER", "ADMIN")
                         .requestMatchers("/api/v1/orders/**").hasAnyRole("CUSTOMER", "ADMIN")
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
-                );
-
+                .oauth2ResourceServer(rs -> rs.jwt(jwt ->
+                        jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
         return http.build();
-    }
-
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(this::extractAuthorities);
-        return converter;
-    }
-
-    private Collection<GrantedAuthority> extractAuthorities(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        if (roles == null) {
-            return List.of();
-        }
-        return roles.stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                .collect(Collectors.toList());
     }
 }

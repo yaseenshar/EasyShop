@@ -11,7 +11,10 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-[ -f "$SCRIPT_DIR/.env" ] && { set -a; source "$SCRIPT_DIR/.env"; set +a; }
+ENV_FOUND=""
+for E in "$SCRIPT_DIR/.env" "$SCRIPT_DIR/../.env" "./.env"; do
+  if [ -f "$E" ]; then set -a; source "$E"; set +a; ENV_FOUND="$E"; break; fi
+done
 # Guard against copy-pasting INSTALL.md's example line verbatim (angle
 # brackets and all) into a shell that then stays open - see the identical
 # guard in resource-server-hardening/verify-token-relay.sh for the story.
@@ -23,7 +26,7 @@ case "${TEST_PASS:-}" in
 esac
 KEYCLOAK_GATEWAY_CLIENT_SECRET="${KEYCLOAK_GATEWAY_CLIENT_SECRET:-}"
 TEST_PASS="${TEST_PASS:-Customer#Pass1}"
-echo "[diag] script: ${BASH_SOURCE[0]:-<none, not running under bash>} | .env at: $SCRIPT_DIR/.env exists=$( [ -f "$SCRIPT_DIR/.env" ] && echo yes || echo NO ) | KEYCLOAK_GATEWAY_CLIENT_SECRET is $( [ -n "$KEYCLOAK_GATEWAY_CLIENT_SECRET" ] && echo "set (${#KEYCLOAK_GATEWAY_CLIENT_SECRET} chars)" || echo EMPTY )" >&2
+echo "[diag] script: ${BASH_SOURCE[0]:-<none, not running under bash>} | .env sourced from: ${ENV_FOUND:-<NOT FOUND>} | KEYCLOAK_GATEWAY_CLIENT_SECRET is $( [ -n "$KEYCLOAK_GATEWAY_CLIENT_SECRET" ] && echo "set (${#KEYCLOAK_GATEWAY_CLIENT_SECRET} chars)" || echo EMPTY )" >&2
 
 GATEWAY="http://localhost:8080"
 EUREKA="http://localhost:8761"
