@@ -58,6 +58,17 @@ public class GatewaySecurityConfig {
         );
         entryPoint.setDefaultEntryPoint(new BearerTokenServerAuthenticationEntryPoint());
 
+        // RP-INITIATED (single) LOGOUT. Without this, the default logout
+        // handler only ends the GATEWAY's own WebSession - Keycloak's own
+        // KEYCLOAK_SESSION cookie stays alive, so the very next
+        // /oauth2/authorization/keycloak navigation (clicking "Sign in" again,
+        // or hitting a 401) silently re-authenticates against that still-live
+        // SSO session with NO login form shown, logging the same user back in.
+        // See KeycloakLogoutSuccessHandler's own javadoc for why this is a
+        // hand-built handler and not Spring's OidcClientInitiatedServerLogout-
+        // SuccessHandler.
+        var logoutSuccessHandler = new KeycloakLogoutSuccessHandler();
+
         http
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/actuator/health/**").permitAll()
@@ -85,6 +96,7 @@ public class GatewaySecurityConfig {
                 .exceptionHandling(exceptionHandling -> exceptionHandling
                         .authenticationEntryPoint(entryPoint)
                 )
+                .logout(logout -> logout.logoutSuccessHandler(logoutSuccessHandler))
                 // DEV-ONLY: cookie sessions make the gateway CSRF-relevant (the
                 // resource-server-only gateway was not). Disabled for local dev —
                 // recorded in the handoff §7 "reverse before production" list.

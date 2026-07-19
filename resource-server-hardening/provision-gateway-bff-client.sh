@@ -14,6 +14,15 @@
 #   KEYCLOAK_CONTAINER=easyshop-keycloak
 #   REALM=easyshop
 #   REDIRECT_URI=http://localhost:8080/login/oauth2/code/keycloak
+#   REDIRECT_URI_DEV=http://localhost:4200/login/oauth2/code/keycloak
+#       Angular's dev server (ng serve) proxies /oauth2, /login, /logout to the
+#       gateway with changeOrigin:false (proxy.conf.json), which means the
+#       gateway sees Host: localhost:4200 and computes ITS OWN {baseUrl} (and
+#       therefore the redirect_uri it sends Keycloak) as localhost:4200 - not
+#       8080 - whenever the browser reaches it through ng serve. Without this
+#       second URI registered, Keycloak 400s on the very first /auth request
+#       and sign-in is impossible from the actual SPA (only from curl hitting
+#       the gateway directly on 8080, which is why this was easy to miss).
 #   AUDIENCE_SCOPE=easyshop-audience   # MUST match provision-audience.sh
 #   KC_BOOTSTRAP_ADMIN_USERNAME / KC_BOOTSTRAP_ADMIN_PASSWORD
 #       (if unset, read from the Keycloak container's own environment)
@@ -24,6 +33,7 @@ KEYCLOAK_CONTAINER="${KEYCLOAK_CONTAINER:-easyshop-keycloak}"
 REALM="${REALM:-easyshop}"
 CLIENT_ID="easyshop-gateway-bff"
 REDIRECT_URI="${REDIRECT_URI:-http://localhost:8080/login/oauth2/code/keycloak}"
+REDIRECT_URI_DEV="${REDIRECT_URI_DEV:-http://localhost:4200/login/oauth2/code/keycloak}"
 AUDIENCE_SCOPE="${AUDIENCE_SCOPE:-easyshop-audience}"
 SECRET="${GATEWAY_BFF_CLIENT_SECRET:?Set GATEWAY_BFF_CLIENT_SECRET}"
 
@@ -59,8 +69,9 @@ if [ -z "$CID" ]; then
     -s implicitFlowEnabled=false \
     -s directAccessGrantsEnabled=false \
     -s serviceAccountsEnabled=false \
-    -s "redirectUris=[\"$REDIRECT_URI\"]" \
-    -s "webOrigins=[\"http://localhost:8080\"]" >/dev/null
+    -s "redirectUris=[\"$REDIRECT_URI\",\"$REDIRECT_URI_DEV\"]" \
+    -s "webOrigins=[\"http://localhost:8080\",\"http://localhost:4200\"]" \
+    -s 'attributes."post.logout.redirect.uris"=http://localhost:8080/*##http://localhost:4200/*' >/dev/null
   CID="$(get_client_id)"
   echo "    created (id=$CID)"
 else
@@ -70,7 +81,9 @@ else
     -s standardFlowEnabled=true \
     -s implicitFlowEnabled=false \
     -s directAccessGrantsEnabled=false \
-    -s "redirectUris=[\"$REDIRECT_URI\"]"
+    -s "redirectUris=[\"$REDIRECT_URI\",\"$REDIRECT_URI_DEV\"]" \
+    -s "webOrigins=[\"http://localhost:8080\",\"http://localhost:4200\"]" \
+    -s 'attributes."post.logout.redirect.uris"=http://localhost:8080/*##http://localhost:4200/*'
 fi
 
 echo "==> Setting client secret (idempotent overwrite)"
@@ -106,7 +119,9 @@ check_json "confidential (publicClient=false)"        '"publicClient" *: *false'
 check_json "standard flow enabled"                    '"standardFlowEnabled" *: *true'
 check_json "direct access grants DISABLED"            '"directAccessGrantsEnabled" *: *false'
 check_json "service accounts disabled"                '"serviceAccountsEnabled" *: *false'
-check_json "redirect URI registered"                  "$REDIRECT_URI"
+check_json "redirect URI registered (direct gateway)"  "$REDIRECT_URI"
+check_json "redirect URI registered (ng serve)"        "$REDIRECT_URI_DEV"
+check_json "post-logout redirect URI registered"       "post.logout.redirect.uris"
 
 SECRET_JSON=$(KCADM get "clients/$CID/client-secret" -r "$REALM")
 if printf '%s' "$SECRET_JSON" | grep -q '"value"'; then

@@ -99,6 +99,15 @@ spring:
             token-uri: http://keycloak:8080/realms/easyshop/protocol/openid-connect/token   # the GATEWAY CONTAINER calls these
             jwk-set-uri: http://keycloak:8080/realms/easyshop/protocol/openid-connect/certs
             user-info-uri: http://keycloak:8080/realms/easyshop/protocol/openid-connect/userinfo
+            # NOTE: there is deliberately NO end-session-uri property here - Boot
+            # 4.1's OAuth2ClientProperties.Provider (spring-boot-security-oauth2-
+            # client:4.1.0) has NO endSessionUri field at all (verified against
+            # the actual class - javap has no getEndSessionUri/setEndSessionUri).
+            # RP-initiated logout's end_session_endpoint is ONLY ever populated
+            # via OIDC discovery (issuer-uri), which we can't use here for the
+            # same crash-loop reason as authorization-uri above. See
+            # KeycloakLogoutSuccessHandler for how the endpoint is supplied
+            # instead (a plain constant, same URL as authorization-uri's host).
             # Pinned to sub so session principals and bearer principals name
             # themselves identically -> ONE rate-limit bucket per human
             # (see RateLimiterConfig.java). Changing this silently splits buckets.

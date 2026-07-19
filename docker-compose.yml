@@ -259,6 +259,9 @@ services:
       JAVA_OPTS_APPEND: "-Xms128m -Xmx384m"
     volumes:
       - ./docker/keycloak/realms:/opt/keycloak/data/import
+      # CSS-only override of keycloak.v2 (docker/keycloak/themes/easyshop/) -
+      # see that theme's theme.properties for why it's CSS-only, not FTL.
+      - ./docker/keycloak/themes:/opt/keycloak/themes
     depends_on:
       postgres: { condition: service_healthy }
     networks: [ easyshop-network ]

@@ -2,6 +2,8 @@
   "realm": "easyshop",
   "enabled": true,
   "displayName": "EasyShop",
+  "displayNameHtml": "EASYSHOP",
+  "loginTheme": "easyshop",
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,
   "loginWithEmailAllowed": true,

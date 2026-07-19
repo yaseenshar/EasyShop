@@ -106,6 +106,7 @@ public class OrderController {
      * to bypass. ADMIN uses a real admin surface if/when "all orders" is needed.
      */
     @GetMapping
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<PagedResponse<OrderResponse>>> listMyOrders(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam(defaultValue = "0") int page,
@@ -121,6 +122,7 @@ public class OrderController {
     // trade-off against query-scoped 404-for-both.
     @PreAuthorize("hasRole('ADMIN') or @orderAccess.isOwner(#orderId, authentication.name)")
     @GetMapping("/{orderId}")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<OrderResponse>> getOrder(@PathVariable UUID orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new com.easyshop.common.exception.ResourceNotFoundException(

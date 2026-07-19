@@ -11,6 +11,7 @@ import org.springframework.web.bind.MissingRequestValueException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
@@ -52,6 +53,20 @@ public class GlobalExceptionHandler {
         // 409 Conflict: state collision (already reviewed, already registered).
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(ex.getMessage(), "DUPLICATE_RESOURCE"));
+    }
+
+    /**
+     * DB-level unique/FK constraint violations that slipped past the
+     * application-level DuplicateResourceException check (e.g. a race
+     * between the existence check and the insert, or JIT provisioning
+     * hitting an email already owned by a different keycloak_id). 409, not
+     * 500 - the request collided with existing state, it did not break
+     * the server.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("Request conflicts with existing data", "DUPLICATE_RESOURCE"));
     }
 
     /**

@@ -17,4 +17,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     Page<Product> findByCategoryIdAndActiveTrue(UUID categoryId, Pageable pageable);
 
     Page<Product> findByActiveTrue(Pageable pageable);
+
+    /** Admin view only (includeInactive=true) - sees deactivated products too. */
+    Page<Product> findByCategoryId(UUID categoryId, Pageable pageable);
 }

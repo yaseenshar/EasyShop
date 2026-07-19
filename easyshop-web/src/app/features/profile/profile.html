@@ -1,0 +1,42 @@
+@if (auth.user(); as u) {
+  <div class="page narrow">
+    <h1 class="title">Profile</h1>
+
+    <div class="card profile-card">
+      <div class="profile-head">
+        <div class="avatar">{{ auth.initials() }}</div>
+        <div>
+          <div class="name">{{ u.firstName }} {{ u.lastName }}</div>
+          <span class="pill pill-accent">{{ u.loyaltyTier }} tier</span>
+        </div>
+      </div>
+
+      @if (editing()) {
+        <div class="edit-form">
+          <div class="field">
+            <label>First name</label>
+            <input type="text" [value]="firstName()" (input)="firstName.set($any($event.target).value)" />
+          </div>
+          <div class="field">
+            <label>Last name</label>
+            <input type="text" [value]="lastName()" (input)="lastName.set($any($event.target).value)" />
+          </div>
+          <div class="field">
+            <label>Phone</label>
+            <input type="text" [value]="phoneNumber()" (input)="phoneNumber.set($any($event.target).value)" />
+          </div>
+          <div class="edit-actions">
+            <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">Save</button>
+            <button type="button" class="btn btn-secondary" (click)="cancelEdit()">Cancel</button>
+          </div>
+        </div>
+      } @else {
+        <div class="view-info">
+          <div><span class="muted">Email</span><br />{{ u.email }}</div>
+          <div><span class="muted">Phone</span><br />{{ u.phoneNumber || '—' }}</div>
+          <button type="button" class="btn btn-secondary edit-btn" (click)="startEdit()">Edit profile</button>
+        </div>
+      }
+    </div>
+  </div>
+}

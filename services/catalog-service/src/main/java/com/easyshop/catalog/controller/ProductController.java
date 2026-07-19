@@ -32,9 +32,12 @@ public class ProductController {
     public ResponseEntity<ApiResponse<PagedResponse<ProductResponse>>> listByCategory(
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(
-                ApiResponse.success(productService.listByCategory(categoryId, page, Math.min(size, 100))));
+            @RequestParam(defaultValue = "20") int size,
+            // Admin/vendor product table only - the public catalog never sets
+            // this, so anonymous/customer browsing is unaffected either way.
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
+        return ResponseEntity.ok(ApiResponse.success(
+                productService.listByCategory(categoryId, page, Math.min(size, 100), includeInactive)));
     }
 
     @PostMapping

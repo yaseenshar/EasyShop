@@ -1,0 +1,31 @@
+.title { font-size: 24px; font-weight: 800; margin: 0 0 24px; }
+
+.profile-card { padding: 24px; }
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.name { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+
+.view-info { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.edit-btn { align-self: flex-start; margin-top: 8px; }
+
+.edit-form { display: flex; flex-direction: column; gap: 12px; }
+.edit-actions { display: flex; gap: 10px; margin-top: 8px; }

@@ -1,0 +1,81 @@
+<div class="page mid">
+  <h1 class="title">Checkout</h1>
+
+  @if (!loading()) {
+    <div class="checkout-grid">
+      <div>
+        <h3>Shipping address</h3>
+
+        @if (addresses().length > 0) {
+          <div class="address-list">
+            @for (addr of addresses(); track addr.id) {
+              <label class="address-option" [class.selected]="selectedAddressId() === addr.id">
+                <input
+                  type="radio"
+                  name="shipAddr"
+                  [checked]="selectedAddressId() === addr.id"
+                  (change)="selectAddress(addr.id)"
+                />
+                <div>
+                  <div class="addr-label">{{ addr.label }}</div>
+                  <div class="muted">{{ addr.line }}</div>
+                </div>
+              </label>
+            }
+          </div>
+        } @else {
+          <p class="muted">No saved addresses yet - add one to continue.</p>
+        }
+
+        <div class="card new-address-form">
+          <h3>Add an address</h3>
+          <div class="field">
+            <label>Label</label>
+            <input type="text" [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" />
+          </div>
+          <div class="field">
+            <label>Street address</label>
+            <input type="text" [value]="newLine1()" (input)="newLine1.set($any($event.target).value)" />
+          </div>
+          <div class="field">
+            <label>City</label>
+            <input type="text" [value]="newCity()" (input)="newCity.set($any($event.target).value)" />
+          </div>
+          <div class="field">
+            <label>Postal code</label>
+            <input type="text" [value]="newPostalCode()" (input)="newPostalCode.set($any($event.target).value)" />
+          </div>
+          <div class="field">
+            <label>Country code</label>
+            <input type="text" [value]="newCountryCode()" (input)="newCountryCode.set($any($event.target).value)" />
+          </div>
+          <button type="button" class="btn btn-secondary" (click)="addAddress()">Save address</button>
+        </div>
+      </div>
+
+      <div class="card order-summary">
+        <h3>Order summary</h3>
+        <div class="summary-lines">
+          @for (line of cartService.cart().items; track line.productId) {
+            <div class="summary-row">
+              <span>{{ line.nameSnapshot }} &times; {{ line.quantity }}</span>
+              <span class="bold">{{ line.priceSnapshot * line.quantity | currency }}</span>
+            </div>
+          }
+        </div>
+        <div class="summary-total">
+          <span>Total</span>
+          <span>{{ cartService.cart().subtotal | currency }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn btn-primary full-width"
+          [disabled]="placing() || !selectedAddressId() || cartService.cart().items.length === 0"
+          (click)="placeOrder()"
+        >
+          Place order
+        </button>
+      </div>
+    </div>
+  }
+</div>

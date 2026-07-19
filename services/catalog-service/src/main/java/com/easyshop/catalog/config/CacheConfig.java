@@ -88,9 +88,16 @@ public class CacheConfig {
         // through erased Object.class. Without the _AND_RECORDS variant
         // the root value gets no type hint at all and deserializes to a
         // raw LinkedHashMap.
+        // ProductResponse carries a BigDecimal (price) and an Instant (updatedAt) -
+        // both need their own allowlist entries, same as java.util below, or the
+        // WRITE side happily tags them with a type id that the READ side's
+        // validator then refuses to resolve (empirically confirmed: a cache HIT
+        // on real product data throws SerializationException without these).
         PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("com.easyshop.catalog.dto")
                 .allowIfSubType("java.util")
+                .allowIfSubType("java.math")
+                .allowIfSubType("java.time")
                 .build();
         ObjectMapper cacheMapper = objectMapper.rebuild()
                 .activateDefaultTyping(typeValidator, DefaultTyping.NON_FINAL_AND_RECORDS)
