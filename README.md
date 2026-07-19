@@ -88,22 +88,35 @@ A production-grade, event-driven e-commerce platform built with **Spring Boot**,
 
 ```text
 EasyShop/
-├─ api-gateway/
-├─ services/
-│  ├─ product-service/
-│  ├─ cart-service/
-│  ├─ order-service/
-│  ├─ inventory-service/
-│  ├─ payment-service/
-│  └─ notification-service/
+├─ backend/                     # Java/Maven multi-module reactor
+│  ├─ common/
+│  │  └─ common-lib/            # shared DTOs, exception handling, security converter
+│  ├─ infrastructure/
+│  │  ├─ service-discovery/     # Eureka
+│  │  └─ api-gateway/           # Spring Cloud Gateway (BFF + resource server)
+│  ├─ services/
+│  │  ├─ user-service/
+│  │  ├─ catalog-service/
+│  │  ├─ cart-service/
+│  │  ├─ order-service/
+│  │  ├─ inventory-service/
+│  │  ├─ payment-service/
+│  │  ├─ review-service/
+│  │  └─ notification-service/
+│  └─ pom.xml                   # parent/reactor POM
+├─ frontend/                    # Angular SPA
+│  └─ src/
 ├─ infra/
-│  ├─ docker/
-│  ├─ k8s/
-│  └─ helm/
+│  ├─ docker-compose.yml
+│  └─ docker/                   # Keycloak realm+theme, Postgres/MySQL init, Grafana/Prometheus config
+├─ scripts/                     # setup + adversarial verification tooling
+│  ├─ rbac/
+│  ├─ resource-server-hardening/
+│  ├─ integration-verification/
+│  └─ keycloak-setup/
 ├─ docs/
 │  └─ images/
 │     └─ architecture.png
-├─ docker-compose.yml
 └─ README.md
 ```
 
@@ -142,13 +155,13 @@ cd EasyShop
 ### 2) Start infrastructure dependencies
 
 ```bash
-docker compose up -d
+docker compose -f infra/docker-compose.yml up -d
 ```
 
 ### 3) Build all services
 
 ```bash
-mvn clean install -DskipTests
+cd backend && mvn clean install -DskipTests && cd ..
 ```
 
 ### 4) Run services
@@ -156,14 +169,21 @@ mvn clean install -DskipTests
 You can run each service individually:
 
 ```bash
-cd api-gateway && mvn spring-boot:run
+cd backend/infrastructure/api-gateway && mvn spring-boot:run
 ```
 
 ```bash
-cd services/order-service && mvn spring-boot:run
+cd backend/services/order-service && mvn spring-boot:run
 ```
 
-Repeat for the remaining services.
+Repeat for the remaining services. Or just build the containers via Docker Compose
+(next section) instead of running each one with Maven.
+
+### 5) Run the frontend
+
+```bash
+cd frontend && npm install && ng serve --proxy-config proxy.conf.json
+```
 
 ---
 
@@ -195,20 +215,20 @@ Create a local `.env` (or per-service `application-dev.yml`) from `.env.example`
 ## Run with Docker Compose
 
 ```bash
-docker compose up -d --build
-docker compose ps
+docker compose -f infra/docker-compose.yml up -d --build
+docker compose -f infra/docker-compose.yml ps
 ```
 
 To stop:
 
 ```bash
-docker compose down
+docker compose -f infra/docker-compose.yml down
 ```
 
 To stop and remove volumes:
 
 ```bash
-docker compose down -v
+docker compose -f infra/docker-compose.yml down -v
 ```
 
 ---

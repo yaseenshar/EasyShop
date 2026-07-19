@@ -30,38 +30,38 @@ tools (-~800 MB) account for much of the win; the JVM flags do the rest.
 
 Old Zookeeper-era Kafka data is not KRaft-compatible:
 
-    docker compose down
+    docker compose -f infra/docker-compose.yml down
     docker volume rm easyshop_kafka-data 2>/dev/null || true
     # remove any old zookeeper volume too, then:
-    docker compose up -d
+    docker compose -f infra/docker-compose.yml up -d
     # re-create your topics (auto-create is off):
-    docker compose exec kafka kafka-topics --create --topic order.events --partitions 3 --replication-factor 1 --bootstrap-server localhost:9092
+    docker compose -f infra/docker-compose.yml exec kafka kafka-topics --create --topic order.events --partitions 3 --replication-factor 1 --bootstrap-server localhost:9092
     # ...repeat for the saga command/reply topics + order.events.DLT
 
 ## Startup recipes — run slices, not the world
 
     # Everything (domain + infra), no tools:
-    docker compose up -d
+    docker compose -f infra/docker-compose.yml up -d
 
     # + Kafka UI only while you're debugging topics:
-    docker compose --profile tools up -d kafka-ui
-    docker compose stop kafka-ui        # when done
+    docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
+    docker compose -f infra/docker-compose.yml stop kafka-ui        # when done
 
     # + observability only during Phase 9 work:
-    docker compose --profile observability up -d
+    docker compose -f infra/docker-compose.yml --profile observability up -d
 
     # SLICE: catalog/caching work (~2.2 GB total)
-    docker compose up -d service-discovery api-gateway mysql redis keycloak catalog-service
+    docker compose -f infra/docker-compose.yml up -d service-discovery api-gateway mysql redis keycloak catalog-service
 
     # SLICE: auth/user work (~2.1 GB)
-    docker compose up -d service-discovery api-gateway postgres redis keycloak user-service
+    docker compose -f infra/docker-compose.yml up -d service-discovery api-gateway postgres redis keycloak user-service
 
     # SLICE: full saga path (~3.8 GB)
-    docker compose up -d service-discovery api-gateway postgres mysql redis kafka keycloak \
+    docker compose -f infra/docker-compose.yml up -d service-discovery api-gateway postgres mysql redis kafka keycloak \
         order-service payment-service inventory-service notification-service
 
     # SLICE: cart work (~1.9 GB)
-    docker compose up -d service-discovery api-gateway redis keycloak cart-service
+    docker compose -f infra/docker-compose.yml up -d service-discovery api-gateway redis keycloak cart-service
 
 ## Verify it worked
 
@@ -70,11 +70,11 @@ Old Zookeeper-era Kafka data is not KRaft-compatible:
     docker stats --no-stream
 
     # Proof the flags applied — every service log should show:
-    docker compose logs user-service | grep "Picked up JAVA_TOOL_OPTIONS"
+    docker compose -f infra/docker-compose.yml logs user-service | grep "Picked up JAVA_TOOL_OPTIONS"
 
     # Proof the JVM respected the container limit (heap sized from 320m,
     # not from 8 GB):
-    docker compose exec user-service java -XX:MaxRAMPercentage=70 -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+    docker compose -f infra/docker-compose.yml exec user-service java -XX:MaxRAMPercentage=70 -XX:+PrintFlagsFinal -version | grep MaxHeapSize
 
 ## If a service OOMs after this
 
