@@ -1,0 +1,13 @@
+.title { font-size: 24px; font-weight: 800; margin: 0 0 6px; }
+.subtitle { margin-bottom: 24px; }
+
+.rows { display: flex; flex-direction: column; gap: 14px; }
+
+.mod-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.product-name { font-size: 13px; font-weight: 700; }
+.stars { font-size: 13px; font-weight: 700; color: var(--accent); }
+
+.review-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.review-body { font-size: 13px; color: var(--ink-soft); margin-bottom: 12px; }
+
+.actions { display: flex; gap: 10px; }

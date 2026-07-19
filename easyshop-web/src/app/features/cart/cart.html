@@ -1,0 +1,43 @@
+<div class="page mid">
+  <h1 class="title">Your cart</h1>
+
+  @if (cartService.cart().items.length > 0) {
+    <div class="lines">
+      @for (line of cartService.cart().items; track line.productId) {
+        <div class="line card">
+          <div class="thumb"></div>
+          <div class="line-info">
+            <div class="line-name">{{ line.nameSnapshot }}</div>
+            <div class="muted">{{ line.priceSnapshot | currency }} each</div>
+          </div>
+          <div class="qty-control">
+            <button type="button" (click)="dec(line.productId, line.quantity)">&minus;</button>
+            <div class="qty-value">{{ line.quantity }}</div>
+            <button type="button" (click)="inc(line.productId, line.quantity)">+</button>
+          </div>
+          <div class="line-total">{{ line.priceSnapshot * line.quantity | currency }}</div>
+          <button type="button" class="remove-btn" (click)="remove(line.productId)">Remove</button>
+        </div>
+      }
+    </div>
+
+    <div class="summary card">
+      <div class="summary-row">
+        <span>Subtotal</span>
+        <span class="bold">{{ cartService.cart().subtotal | currency }}</span>
+      </div>
+      <div class="summary-row muted">
+        <span>Shipping</span>
+        <span>Free</span>
+      </div>
+      <button type="button" class="btn btn-primary checkout-btn" (click)="goCheckout()">
+        Proceed to checkout
+      </button>
+    </div>
+  } @else {
+    <div class="empty-state">
+      <div>Your cart is empty.</div>
+      <a routerLink="/" class="btn btn-dark">Browse products</a>
+    </div>
+  }
+</div>

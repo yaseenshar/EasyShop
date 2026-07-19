@@ -1,0 +1,28 @@
+<div class="page">
+  <div class="page-head">
+    <h1>{{ categoryTitle() }}</h1>
+    <span class="count">{{ cards().length }} product{{ cards().length === 1 ? '' : 's' }}</span>
+  </div>
+
+  @if (loading()) {
+    <p class="muted">Loading&hellip;</p>
+  } @else if (cards().length === 0) {
+    <div class="empty-state">
+      <div>No products in this category yet.</div>
+    </div>
+  } @else {
+    <div class="grid">
+      @for (card of cards(); track card.product.id) {
+        <div class="card product-card" (click)="openProduct(card.product.id)">
+          <div class="thumb">{{ card.product.sku }}<br />photo</div>
+          <div class="name">{{ card.product.name }}</div>
+          <div class="muted">{{ card.ratingLabel }}</div>
+          <div class="card-footer">
+            <div class="price">{{ card.product.price | currency: card.product.currency }}</div>
+            <button type="button" class="btn btn-primary btn-sm" (click)="addToCart(card, $event)">Add</button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

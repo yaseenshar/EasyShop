@@ -31,6 +31,8 @@ public final class OrderDtos {
             String status,
             BigDecimal totalAmount,
             String currency,
+            UUID shippingAddressId,
+            List<OrderItemResponse> items,
             Instant createdAt
     ) {
         public static OrderResponse from(Order order) {
@@ -39,8 +41,22 @@ public final class OrderDtos {
                     order.getStatus().name(),
                     order.getTotalAmount(),
                     order.getCurrency(),
+                    order.getShippingAddressId(),
+                    order.getItems().stream().map(OrderItemResponse::from).toList(),
                     order.getCreatedAt()
             );
+        }
+    }
+
+    /** No product name here - order-service doesn't own catalog data; the
+     *  caller resolves names from catalog-service if it needs to display them. */
+    public record OrderItemResponse(
+            UUID productId,
+            int quantity,
+            BigDecimal unitPrice
+    ) {
+        public static OrderItemResponse from(com.easyshop.order.entity.OrderItem item) {
+            return new OrderItemResponse(item.getProductId(), item.getQuantity(), item.getUnitPrice());
         }
     }
 

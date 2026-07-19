@@ -1,0 +1,38 @@
+.title { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
+.subtitle { margin-bottom: 28px; }
+
+.timeline {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.timeline-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  z-index: 1;
+}
+.dot-done { background: var(--success); }
+.dot-pending { background: var(--timeline-idle); }
+.dot-failed { background: var(--danger); }
+
+.step-label { font-size: 12px; font-weight: 700; margin-top: 8px; }
+.label-done { color: var(--ink); }
+.label-pending { color: var(--timeline-idle-text); }
+.label-failed { color: var(--danger); }
+
+.stall-note { margin-bottom: 20px; }
+
+.lines-card { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+.summary-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; }
+.bold { font-weight: 700; }
+
+.actions { display: flex; gap: 12px; }

@@ -1,0 +1,81 @@
+<div class="shell">
+  <header class="header">
+    <div class="header-inner">
+      <a routerLink="/" class="logo">EASYSHOP</a>
+
+      <nav class="nav">
+        <a
+          routerLink="/"
+          [queryParams]="{}"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          class="nav-link"
+        >
+          All
+        </a>
+        @for (cat of categories(); track cat.id) {
+          <a
+            routerLink="/"
+            [queryParams]="{ categoryId: cat.id }"
+            routerLinkActive="active"
+            class="nav-link"
+          >
+            {{ cat.name }}
+          </a>
+        }
+      </nav>
+
+      <div class="header-actions">
+        @if (auth.hasRole('CUSTOMER')) {
+          <a routerLink="/cart" class="cart-btn">
+            Cart
+            @if (cart.cart().totalItems > 0) {
+              <span class="cart-badge">{{ cart.cart().totalItems }}</span>
+            }
+          </a>
+        }
+
+        @if (auth.isAuthenticated()) {
+          <div class="user-menu-wrap">
+            <button type="button" class="avatar-btn" (click)="toggleUserMenu()">
+              <span class="avatar">{{ auth.initials() }}</span>
+            </button>
+            @if (userMenuOpen()) {
+              <div class="user-menu">
+                <a routerLink="/profile" class="menu-item" (click)="closeUserMenu()">Profile</a>
+                @if (auth.hasRole('CUSTOMER')) {
+                  <a routerLink="/orders" class="menu-item" (click)="closeUserMenu()">Order history</a>
+                }
+                @if (auth.hasRole('ADMIN')) {
+                  <div class="menu-divider"></div>
+                  <a routerLink="/admin/reviews" class="menu-item menu-item-admin" (click)="closeUserMenu()">
+                    Admin &middot; Review queue
+                  </a>
+                }
+                @if (auth.hasAnyRole('ADMIN', 'VENDOR')) {
+                  <a routerLink="/admin/products" class="menu-item menu-item-admin" (click)="closeUserMenu()">
+                    Admin &middot; Products
+                  </a>
+                }
+                <div class="menu-divider"></div>
+                <button type="button" class="menu-item menu-item-danger" (click)="signOut()">
+                  Sign out
+                </button>
+              </div>
+            }
+          </div>
+        } @else {
+          <button type="button" class="sign-in-btn" (click)="signIn()">Sign in</button>
+        }
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <router-outlet />
+  </main>
+
+  @if (toast.message(); as msg) {
+    <div class="toast">{{ msg }}</div>
+  }
+</div>

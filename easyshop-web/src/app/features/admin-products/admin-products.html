@@ -1,0 +1,85 @@
+<div class="page admin">
+  <div class="page-head">
+    <h1>Products</h1>
+    <button type="button" class="btn btn-dark" (click)="openAddForm()">+ Add product</button>
+  </div>
+
+  @if (formOpen()) {
+    <div class="card form-card">
+      <h3>{{ formMode() === 'add' ? 'Add product' : 'Edit product' }}</h3>
+      <div class="form-grid">
+        <div class="field">
+          <label>SKU</label>
+          <input type="text" [value]="sku()" (input)="sku.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label>Name</label>
+          <input type="text" [value]="name()" (input)="name.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          <label>Price (USD)</label>
+          <input type="text" [value]="price()" (input)="price.set($any($event.target).value)" />
+        </div>
+        <div class="field">
+          @if (formMode() === 'add') {
+            <label>Category</label>
+            <select [value]="categoryId()" (change)="categoryId.set($any($event.target).value)">
+              @for (cat of categories(); track cat.id) {
+                <option [value]="cat.id">{{ cat.name }}</option>
+              }
+            </select>
+          } @else {
+            <label>Category</label>
+            <input type="text" [value]="categoryName(categoryId())" disabled />
+          }
+        </div>
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <textarea rows="3" [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-primary btn-sm" (click)="submitForm()">Save</button>
+        <button type="button" class="btn btn-secondary btn-sm" (click)="closeForm()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  @if (!loading()) {
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>SKU</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.product.id) {
+            <tr>
+              <td class="mono">{{ row.product.sku }}</td>
+              <td class="bold">{{ row.product.name }}</td>
+              <td>{{ row.categoryName }}</td>
+              <td class="bold">{{ row.product.price | currency: row.product.currency }}</td>
+              <td>
+                <span class="pill" [class]="row.product.active ? 'pill-success' : 'pill-neutral'">
+                  {{ row.product.active ? 'Active' : 'Inactive' }}
+                </span>
+              </td>
+              <td class="actions-cell">
+                <button type="button" class="btn btn-secondary btn-sm" (click)="openEditForm(row)">Edit</button>
+                @if (row.product.active) {
+                  <button type="button" class="btn btn-secondary btn-sm" (click)="deactivate(row)">Deactivate</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

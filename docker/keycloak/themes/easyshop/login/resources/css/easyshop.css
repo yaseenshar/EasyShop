@@ -1,0 +1,132 @@
+/* ============================================================================
+ * EasyShop Keycloak theme — CSS-only override of keycloak.v2 (PatternFly v5).
+ * Tokens copied verbatim from easyshop-web/src/styles.css so the hosted
+ * Keycloak pages read as part of the same app, not a third-party redirect.
+ * ========================================================================== */
+
+:root {
+  --es-ink: oklch(22% 0.01 90);
+  --es-ink-soft: oklch(35% 0.01 90);
+  --es-muted: oklch(48% 0.01 90);
+  --es-faint: oklch(65% 0.01 90);
+  --es-bg: oklch(98% 0.005 90);
+  --es-surface: #ffffff;
+  --es-border: oklch(90% 0.005 90);
+  --es-border-input: oklch(88% 0.005 90);
+  --es-primary: oklch(52% 0.15 265);
+  --es-primary-hover: oklch(46% 0.15 265);
+  --es-primary-tint: oklch(94% 0.03 265);
+  --es-danger: oklch(55% 0.15 25);
+  --es-radius-btn: 6px;
+  --es-radius-card: 10px;
+  --es-font: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Keycloak's own hooks (see keycloak.v2/login/resources/css/styles.css) */
+  --keycloak-card-top-color: var(--es-primary);
+}
+
+html,
+body,
+.login-pf body {
+  background: var(--es-bg) !important;
+  font-family: var(--es-font) !important;
+  color: var(--es-ink);
+}
+
+/* Kill the stock Keycloak background artwork entirely - flat brand background instead. */
+#keycloak-bg {
+  background: var(--es-bg) !important;
+}
+
+/* ---------------------------------------------------------------- header */
+
+#kc-header {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0 8px;
+}
+
+#kc-header-wrapper {
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.5px;
+  color: var(--es-ink);
+  background-image: none !important;
+}
+
+/* -------------------------------------------------------------- the card */
+
+.pf-v5-c-login__main-header {
+  border-top: 4px solid var(--keycloak-card-top-color);
+}
+
+.pf-v5-c-login__main {
+  background: var(--es-surface);
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.pf-v5-c-title,
+#kc-page-title {
+  color: var(--es-ink) !important;
+  font-weight: 800 !important;
+}
+
+/* -------------------------------------------------------------- controls */
+
+.pf-v5-c-form-control {
+  border-radius: var(--es-radius-btn) !important;
+  border-color: var(--es-border-input) !important;
+}
+
+.pf-v5-c-form-control:focus {
+  border-color: var(--es-primary) !important;
+  box-shadow: 0 0 0 1px var(--es-primary) !important;
+}
+
+.pf-v5-c-form__label-text {
+  color: var(--es-muted);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+/* buttons - primary matches the app's .btn-primary exactly */
+.pf-v5-c-button.pf-m-primary {
+  background-color: var(--es-primary) !important;
+  border-radius: var(--es-radius-btn) !important;
+  font-weight: 700;
+}
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus {
+  background-color: var(--es-primary-hover) !important;
+}
+
+.pf-v5-c-button.pf-m-secondary {
+  color: var(--es-ink) !important;
+  border-color: var(--es-border-input) !important;
+  border-radius: var(--es-radius-btn) !important;
+}
+
+/* links (register / forgot password / back to login) */
+#kc-registration a,
+#kc-form-options a,
+.pf-v5-c-login__main-footer-band a,
+a {
+  color: var(--es-primary);
+}
+#kc-registration a:hover,
+#kc-form-options a:hover,
+a:hover {
+  color: var(--es-primary-hover);
+}
+
+/* checkboxes ("remember me") */
+.pf-v5-c-check__label {
+  color: var(--es-ink-soft);
+}
+
+/* alerts (error/info banners) keep PatternFly's semantics, just tone the border radius */
+.pf-v5-c-alert {
+  border-radius: var(--es-radius-btn);
+}

@@ -1,0 +1,93 @@
+@if (loading()) {
+  <div class="page product"><p class="muted">Loading&hellip;</p></div>
+} @else if (product(); as p) {
+  <div class="page product">
+    <button type="button" class="back-link" (click)="goHome()">&larr; Back to shop</button>
+
+    <div class="detail-grid">
+      <div class="hero">{{ p.sku }} &mdash; photo</div>
+      <div>
+        <div class="category-label">{{ categoryName() }}</div>
+        <h1>{{ p.name }}</h1>
+        <div class="muted rating-line">{{ ratingLabel() }}</div>
+        <div class="price">{{ p.price | currency: p.currency }}</div>
+        <p class="description">{{ p.description }}</p>
+
+        <div class="buy-row">
+          <div class="qty-control">
+            <button type="button" (click)="decQty()">&minus;</button>
+            <div class="qty-value">{{ qty() }}</div>
+            <button type="button" (click)="incQty()">+</button>
+          </div>
+          <button type="button" class="btn btn-primary buy-btn" (click)="addToCart()">Add to cart</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="reviews-section">
+      <div>
+        <h2>Reviews ({{ reviews().length }})</h2>
+        @if (reviews().length > 0) {
+          <div class="review-list">
+            @for (rev of reviews(); track rev.id) {
+              <div class="review">
+                <div class="review-head">
+                  <div class="stars">{{ starsFor(rev.rating) }}</div>
+                  @if (rev.verifiedPurchase) {
+                    <span class="pill pill-success">Verified purchase</span>
+                  }
+                </div>
+                <div class="review-title">{{ rev.title }}</div>
+                <div class="review-body">{{ rev.body }}</div>
+              </div>
+            }
+          </div>
+        } @else {
+          <p class="muted">No reviews yet &mdash; be the first to write one.</p>
+        }
+      </div>
+
+      @if (auth.hasRole('CUSTOMER')) {
+        <div class="card review-form">
+          <h3>Write a review</h3>
+          <div class="star-picker">
+            @for (n of [1, 2, 3, 4, 5]; track n) {
+              <button
+                type="button"
+                class="star-btn"
+                [class.star-filled]="n <= reviewRating()"
+                (click)="setReviewRating(n)"
+              >
+                ★
+              </button>
+            }
+          </div>
+          <div class="field">
+            <input
+              type="text"
+              placeholder="Review title"
+              [value]="reviewTitle()"
+              (input)="reviewTitle.set($any($event.target).value)"
+            />
+          </div>
+          <div class="field">
+            <textarea
+              rows="4"
+              placeholder="Share your thoughts on this product"
+              [value]="reviewBody()"
+              (input)="reviewBody.set($any($event.target).value)"
+            ></textarea>
+          </div>
+          <button
+            type="button"
+            class="btn btn-dark full-width"
+            [disabled]="submittingReview()"
+            (click)="submitReview()"
+          >
+            Submit for moderation
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+}

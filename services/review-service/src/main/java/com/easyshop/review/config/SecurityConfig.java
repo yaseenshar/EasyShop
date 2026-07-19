@@ -52,12 +52,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**").permitAll()
 
-                        // TODO: align patterns (especially the moderation path) with your
-                        // actual controllers — a mismatched moderation pattern fails open
-                        // into hasAnyRole below, not closed.
-                        .requestMatchers("/api/v1/reviews/*/moderation/**").hasRole("ADMIN")
+                        // Real controller paths are /api/v1/reviews/moderation/queue and
+                        // /api/v1/reviews/moderation/{id}/approve|reject — no path segment
+                        // between "reviews" and "moderation". Must be declared before the
+                        // GET-permitAll/POST-CUSTOMER rules below or it fails open into them.
+                        .requestMatchers("/api/v1/reviews/moderation/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/reviews/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/reviews/**").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/reviews").hasRole("CUSTOMER")
                         .requestMatchers("/api/v1/reviews/**").hasAnyRole("CUSTOMER", "ADMIN")
 
                         .anyRequest().authenticated()

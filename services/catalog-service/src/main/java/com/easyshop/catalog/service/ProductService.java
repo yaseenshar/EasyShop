@@ -76,16 +76,20 @@ public class ProductService {
      */
     @Cacheable(cacheNames = CacheConfig.PRODUCT_LISTINGS_CACHE,
             key = "#categoryId + ':' + #page + ':' + #size",
-            condition = "#page <= 3",
+            condition = "#page <= 3 && !#includeInactive",
             sync = true)
     @Transactional(readOnly = true)
-    public PagedResponse<ProductResponse> listByCategory(UUID categoryId, int page, int size) {
+    public PagedResponse<ProductResponse> listByCategory(UUID categoryId, int page, int size,
+                                                          boolean includeInactive) {
         PageRequest pageRequest = PageRequest.of(page, size);
-        Page<ProductResponse> result = (categoryId == null
-                ? productRepository.findByActiveTrue(pageRequest)
-                : productRepository.findByCategoryIdAndActiveTrue(categoryId, pageRequest))
-                .map(ProductResponse::from);
-        return PagedResponse.from(result);
+        Page<Product> products = includeInactive
+                ? (categoryId == null
+                        ? productRepository.findAll(pageRequest)
+                        : productRepository.findByCategoryId(categoryId, pageRequest))
+                : (categoryId == null
+                        ? productRepository.findByActiveTrue(pageRequest)
+                        : productRepository.findByCategoryIdAndActiveTrue(categoryId, pageRequest));
+        return PagedResponse.from(products.map(ProductResponse::from));
     }
 
     @Transactional

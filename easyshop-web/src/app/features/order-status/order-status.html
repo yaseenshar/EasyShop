@@ -1,0 +1,36 @@
+@if (order(); as o) {
+  <div class="page status">
+    <h1 class="title">Order #{{ o.id.slice(0, 8).toUpperCase() }}</h1>
+    <div class="muted subtitle">Placed {{ o.createdAt | date: 'mediumDate' }} &middot; {{ o.totalAmount | currency: o.currency }}</div>
+
+    <div class="timeline">
+      @for (step of timeline(); track step.label) {
+        <div class="timeline-step">
+          <div class="dot" [class]="'dot-' + step.state"></div>
+          <div class="step-label" [class]="'label-' + step.state">{{ step.label }}</div>
+        </div>
+      }
+    </div>
+
+    @if (stalled()) {
+      <p class="muted stall-note">
+        This order is taking longer than expected. Your payment is safe &mdash; we'll email you as soon
+        as it's confirmed.
+      </p>
+    }
+
+    <div class="card lines-card">
+      @for (line of lines(); track line.name) {
+        <div class="summary-row">
+          <span>{{ line.name }} &times; {{ line.quantity }}</span>
+          <span class="bold">{{ line.total | currency: o.currency }}</span>
+        </div>
+      }
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" (click)="goOrders()">View order history</button>
+      <button type="button" class="btn btn-dark" (click)="goHome()">Continue shopping</button>
+    </div>
+  </div>
+}

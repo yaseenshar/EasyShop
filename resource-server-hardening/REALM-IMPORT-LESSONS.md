@@ -21,9 +21,14 @@ Everything else - client secrets, custom client scopes, protocol mappers,
 scope attachments, service-account roles - is applied by idempotent kcadm
 scripts that can be re-run and, crucially, VERIFIED:
 
-    ./fix-client-secrets.sh      # secrets from .env
-    ./provision-audience.sh      # easyshop-api-audience scope + attach
-    ./add-sub-mapper.sh          # oidc-sub-mapper (restores 'sub')
+    ./fix-client-secrets.sh              # secrets from .env
+    ./provision-audience.sh              # easyshop-api-audience scope + attach
+    ./add-sub-mapper.sh                  # oidc-sub-mapper (restores 'sub')
+    ./provision-gateway-bff-client.sh    # BFF client, both redirect URIs (8080 direct + 4200 ng serve)
+    ./provision-self-registration.sh     # CUSTOMER as a default role + email/given_name/family_name claims -
+                                          # without this, Keycloak's own registration page produces users
+                                          # that 403 on their first /me call (no app role, no profile claims
+                                          # for user-service's JIT provisioning to work from)
 
 This is the same conclusion real teams reach with the Keycloak Terraform
 provider or the Keycloak Operator: declarative-but-total import files are

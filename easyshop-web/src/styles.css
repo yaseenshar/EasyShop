@@ -1,0 +1,173 @@
+/* You can add global styles to this file, and also import other style files */
+/* ============================================================================
+ * EasyShop design tokens — extracted VERBATIM from app.html.
+ * The design file is the source of truth; these custom properties transcribe
+ * it, they do not reinterpret it. Every value below appears literally in the
+ * design's inline styles.
+ * ========================================================================== */
+
+:root {
+  /* ---- Ink (all neutrals share hue 90, chroma ~0.01 — warm gray family) --- */
+  --ink:        oklch(22% 0.01 90);   /* primary text, dark buttons, toast bg */
+  --ink-soft:   oklch(35% 0.01 90);   /* body copy, inactive nav              */
+  --muted:      oklch(48% 0.01 90);   /* secondary text, labels, meta         */
+  --faint:      oklch(65% 0.01 90);   /* placeholders                         */
+
+  /* ---- Surfaces & borders ------------------------------------------------ */
+  --bg:         oklch(98% 0.005 90);  /* page background                      */
+  --surface:    #ffffff;              /* cards, header, inputs                */
+  --surface-2:  oklch(96% 0.003 90);  /* table header row                     */
+  --border:     oklch(90% 0.005 90);  /* card & divider borders               */
+  --border-input: oklch(88% 0.005 90);/* input & secondary-button borders     */
+  --img-a:      oklch(94% 0.005 90);  /* image-placeholder stripe A           */
+  --img-b:      oklch(97% 0.003 90);  /* image-placeholder stripe B           */
+
+  /* ---- Brand / semantic -------------------------------------------------- */
+  --primary:        oklch(52% 0.15 265);  /* indigo — CTAs, links, avatar, badge dot */
+  --primary-hover:  oklch(46% 0.15 265);  /* link hover                              */
+  --primary-tint:   oklch(94% 0.03 265);  /* active nav-category pill bg             */
+
+  --success:        oklch(52% 0.14 145);  /* approve, CONFIRMED, timeline done dots  */
+  --success-tint:   oklch(94% 0.03 145);  /* Verified-purchase & Active pills        */
+
+  --danger:         oklch(55% 0.15 25);   /* remove, reject, sign out, CANCELLED     */
+  --danger-tint:    oklch(95% 0.03 25);   /* CANCELLED pill bg                       */
+
+  --accent:         oklch(55% 0.14 85);   /* stars, PROCESSING status, loyalty tier  */
+  --accent-tint:    oklch(96% 0.03 85);   /* loyalty/PROCESSING pill bg              */
+
+  --timeline-idle:  oklch(88% 0.005 90);  /* future timeline dots                    */
+  --timeline-idle-text: oklch(60% 0.01 90);
+
+  /* ---- Typography -------------------------------------------------------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', Consolas, monospace;   /* SKUs and only SKUs */
+  /* Scale observed: 11 (pills/table headers, uppercase +0.4px tracking),
+     12–13 (meta/labels/buttons), 14–15 (body/controls), 16 (card price),
+     18 (h3 section), 20 (logo), 22–26 (page h1), 28 (product h1).
+     Weights: 600 (nav), 700 (labels/UI bold), 800 (headings, prices, logo). */
+
+  /* ---- Shape & elevation ------------------------------------------------- */
+  --radius-btn:   6px;
+  --radius-card:  10px;
+  --radius-img:   8px;    /* 12px on product-detail hero */
+  --radius-pill:  10px;
+  --shadow-menu:  0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.2);
+
+  /* ---- Layout (per-screen max-widths, from the design) ------------------- */
+  --w-shell:     1240px;  /* header + catalog grid       */
+  --w-product:   1100px;  /* product detail              */
+  --w-admin:     1000px;  /* admin products table        */
+  --w-mid:        900px;  /* cart, checkout, orders, moderation */
+  --w-status:     700px;  /* order status                */
+  --w-narrow:     600px;  /* profile                     */
+  /* Catalog grid: repeat(auto-fill, minmax(230px, 1fr)), gap 22px.           */
+}
+
+/* Global rules present in the design's <helmet> block */
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-sans); }
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary-hover); }
+::placeholder { color: var(--faint); }
+input, select, textarea, button { font-family: inherit; }
+
+/* ============================================================================
+ * Shared atoms — the same handful of patterns repeat on every screen in the
+ * design (page container, muted meta text, primary/secondary/danger buttons,
+ * form fields, cards, pills, tables). Living globally means each page's own
+ * stylesheet only carries its layout, not another copy of these rules.
+ * ========================================================================== */
+
+.page { max-width: var(--w-shell); margin: 0 auto; padding: 32px; }
+.page.narrow { max-width: var(--w-narrow); }
+.page.mid { max-width: var(--w-mid); }
+.page.product { max-width: var(--w-product); }
+.page.admin { max-width: var(--w-admin); }
+.page.status { max-width: var(--w-status); }
+
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.page-head h1 { font-size: 26px; font-weight: 800; margin: 0; }
+.page-head .count { font-size: 13px; color: var(--muted); }
+
+.muted { color: var(--muted); font-size: 13px; }
+
+.btn {
+  border: none;
+  border-radius: var(--radius-btn);
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 10px 18px;
+}
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-dark { background: var(--ink); color: #fff; }
+.btn-secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--border-input); }
+.btn-danger-outline { background: var(--surface); color: var(--danger); border: 1px solid var(--danger); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-sm { font-size: 12px; padding: 8px 14px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px;
+}
+
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field label { font-size: 12px; font-weight: 700; color: var(--muted); }
+.field input,
+.field select,
+.field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-btn);
+  padding: 9px 10px;
+  font-size: 13px;
+}
+.field textarea { resize: vertical; }
+
+.pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  display: inline-block;
+}
+.pill-success { color: var(--success); background: var(--success-tint); }
+.pill-danger { color: var(--danger); background: var(--danger-tint); }
+.pill-accent { color: var(--accent); background: var(--accent-tint); }
+.pill-neutral { color: var(--muted); background: var(--surface-2); }
+
+.empty-state { text-align: center; padding: 60px 0; color: var(--muted); }
+.empty-state div { font-size: 15px; margin-bottom: 16px; }
+
+table.data-table { width: 100%; border-collapse: collapse; }
+.data-table thead th {
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 10px 16px;
+  text-align: left;
+}
+.data-table tbody td {
+  background: var(--surface);
+  padding: 12px 16px;
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}
+.data-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
