@@ -1,0 +1,2 @@
+com.easyshop.common.config.CommonAutoConfiguration
+com.easyshop.common.security.SecurityCommonAutoConfiguration

@@ -1,62 +1,69 @@
-package com.easyshop.review.config;
+package com.easyshop.review.config; // align with the service's actual config package
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
-import java.util.Collection;
-import java.util.List;
-
 /**
- * Same resource-server pattern as user-service (Phase 2) - see that
- * SecurityConfig for the full rationale. Differences here: product
- * reviews and rating summaries are PUBLIC reads (shoppers browse without
- * logging in), submission requires any authenticated user, moderation
- * requires ADMIN (enforced both here at the URL level and via
- * @PreAuthorize at the method level - deliberate belt and suspenders).
+ * review-service RBAC.
+ *
+ * READS mirror the catalog decision: reviews are part of the shop window, so
+ * anonymous GET follows Option A (public browse). If catalog goes Option B,
+ * flip reads here too — a half-public browse surface is the worst of both.
+ * Public reads also require the matching gateway permitAll (README §4).
+ *
+ * WRITES: CUSTOMER-only — reviewing is a customer act. The Verified-Purchase
+ * mechanism (§4.12) already handles WHICH customers reviewed credibly; RBAC
+ * only gates the act itself.
+ *
+ * MODERATION: the state machine (§ moderation transitions) is an ADMIN surface.
+ * Its IllegalStateException family now flows through GlobalExceptionHandler,
+ * and its denials must come out as 403 — the AccessDeniedException handler
+ * addition (common-lib/GlobalExceptionHandler-additions.java) is what keeps
+ * a vendor poking a moderation endpoint from surfacing as a 500.
+ *
+ * Fine-grained follow-ups for method security, when needed:
+ *   - edit/delete own review: query-scoped ownership by sub (order-service pattern)
+ *   - vendor responses to reviews: a VENDOR-gated endpoint — meaningful only
+ *     after vendor_id ownership lands (deferred, README §6).
  */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
 
+    private final JwtAuthenticationConverter jwtAuthenticationConverter; // common-lib auto-config
+
+    public SecurityConfig(JwtAuthenticationConverter jwtAuthenticationConverter) {
+        this.jwtAuthenticationConverter = jwtAuthenticationConverter;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET,
-                                "/api/v1/reviews/products/**").permitAll()
-                        .requestMatchers("/api/v1/reviews/moderation/**").hasRole("ADMIN")
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/actuator/health/**").permitAll()
+
+                        // TODO: align patterns (especially the moderation path) with your
+                        // actual controllers — a mismatched moderation pattern fails open
+                        // into hasAnyRole below, not closed.
+                        .requestMatchers("/api/v1/reviews/*/moderation/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reviews/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/reviews/**").hasRole("CUSTOMER")
+                        .requestMatchers("/api/v1/reviews/**").hasAnyRole("CUSTOMER", "ADMIN")
+
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
+                .oauth2ResourceServer(rs -> rs.jwt(jwt ->
+                        jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
         return http.build();
-    }
-
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(this::extractAuthorities);
-        return converter;
-    }
-
-    private Collection<GrantedAuthority> extractAuthorities(Jwt jwt) {
-        List<String> roles = jwt.getClaimAsStringList("roles");
-        if (roles == null) return List.of();
-        return roles.stream()
-                .map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
-                .toList();
     }
 }

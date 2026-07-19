@@ -9,6 +9,8 @@ import com.easyshop.user.exception.UserNotFoundException;
 import com.easyshop.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.UUID;
+
 @Service
 public class UserServiceImpl implements UserService{
 
@@ -40,6 +42,13 @@ public class UserServiceImpl implements UserService{
     public UserResponse getUserByKeycloakId(String keycloakId) {
         User user = userRepository.findByKeycloakId(keycloakId)
                 .orElseThrow(() -> new UserNotFoundException(keycloakId));
+        return UserResponse.from(user);
+    }
+
+    @Override
+    public UserResponse getUserById(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException(userId.toString()));
         return UserResponse.from(user);
     }
 
