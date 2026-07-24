@@ -2,7 +2,9 @@ package com.easyshop.common.config;
 
 import com.easyshop.common.exception.GlobalExceptionHandler;
 import com.easyshop.common.exception.SecurityExceptionHandler;
+import com.easyshop.common.exception.ServletExceptionHandler;
 import com.easyshop.common.exception.ValidationExceptionHandler;
+import jakarta.servlet.ServletException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -65,5 +67,16 @@ public class CommonAutoConfiguration {
     @ConditionalOnClass(ConstraintViolationException.class)
     public ValidationExceptionHandler validationExceptionHandler() {
         return new ValidationExceptionHandler();
+    }
+
+    /** Same reasoning again, for jakarta.servlet.ServletException (both of
+     *  ServletExceptionHandler's handled types transitively extend it) - see
+     *  ServletExceptionHandler's javadoc. api-gateway (pure WebFlux/Netty) is
+     *  the service this actually guards today. */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnClass(ServletException.class)
+    public ServletExceptionHandler servletExceptionHandler() {
+        return new ServletExceptionHandler();
     }
 }

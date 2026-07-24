@@ -61,41 +61,106 @@ eureka:
   instance:
     prefer-ip-address: true
 
-# Resilience4j circuit breaker + retry configuration for the payment gateway
-# call (PaymentGatewayClient, Step 4.2). These thresholds are deliberately
-# explained, not just pasted - able to defend each number in an interview:
+  # =============================================================================
+  # Shared resilience config — paste into EVERY service that has a breaker
+  # (payment-service, review-service, catalog-service).
+  #
+  # Same YAML-anchor consolidation applies as the OIDC block (§6.5) if you want
+  # it in one place; kept per-service here so each file remains readable and
+  # the instance overrides sit next to their base.
+  # =============================================================================
+
 resilience4j:
   circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: TIME_BASED
+        slidingWindowSize: 30
+        minimumNumberOfCalls: 10        # library default is 100 → breaker never
+          # opens in dev. Prod value belongs on the
+        # §7 dev-only reversal list.
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        registerHealthIndicator: true
+
+        # ---------------------------------------------------------------------
+        # 4xx IS NOT A DOWNSTREAM FAILURE.
+        # A 404 from order-service means "no such order", not "order-service is
+        # sick". Counting client errors lets one bad request pattern open the
+        # breaker for every user. ignoreExceptions takes precedence over
+        # recordExceptions, so listing here is unambiguous.
+        #
+        # Adjust the exception types to whatever your HTTP client actually
+        # throws — RestClient throws HttpClientErrorException; a @HttpExchange
+        # interface may surface something else. VERIFY by forcing a 404 and
+        # reading the stack trace (§6.3), then confirm the breaker's
+        # failure count did NOT move.
+        # ---------------------------------------------------------------------
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
+        recordExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - org.springframework.web.client.ResourceAccessException  # timeouts, conn refused
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+
     instances:
+      # ---- review-service -----------------------------------------------------
+      # Existing breaker on PurchaseVerifier (§4.12 / §6.1 self-invocation fix).
+      # Name must match the @CircuitBreaker(name = "...") already in the code.
+      orderInternal:
+        baseConfig: default
+        slowCallDurationThreshold: 1s   # a badge lookup must never hold a page
+
+      # ---- payment-service ----------------------------------------------------
+      # Existing breaker on the external charge path.
       paymentGateway:
-        # Open the circuit once 50% of the last 10 calls failed - aggressive
-        # enough to protect a struggling gateway, lenient enough not to trip
-        # on normal noise (a handful of declined cards isn't "failure" here
-        # since declines return a normal GatewayResult, not an exception).
-        failure-rate-threshold: 50
-        sliding-window-size: 10
-        sliding-window-type: COUNT_BASED
-        # Stay OPEN for 10s before allowing a trial request through (HALF_OPEN)
-        wait-duration-in-open-state: 10s
-        permitted-number-of-calls-in-half-open-state: 3
-        automatic-transition-from-open-to-half-open-enabled: true
+        baseConfig: default
+        waitDurationInOpenState: 30s    # payment provider outages last longer;
+        # hammering an unhealthy PSP is worse
+        slowCallDurationThreshold: 5s   # PSPs are legitimately slow
+
+      # ---- catalog-service (optional, see README) -----------------------------
+      # Redis here is a CACHE (§4.9) — falling back to MySQL is real degradation.
+      catalogCache:
+        baseConfig: default
+        waitDurationInOpenState: 5s
+
+  # ---------------------------------------------------------------------------
+  # Retry — only where the operation is idempotent.
+  # Default aspect order puts Retry OUTSIDE CircuitBreaker, so each attempt
+  # records its own breaker failure (N retries consume N window slots).
+  # Never attach retry to the payment charge itself; the idempotency key
+  # (§4.8) is what makes a retry safe, not the breaker.
+  # ---------------------------------------------------------------------------
   retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 200ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
     instances:
-      paymentGateway:
-        max-attempts: 3
-        wait-duration: 200ms
-        # Exponential backoff: 200ms, 400ms, 800ms - avoids hammering an
-        # already-struggling gateway with immediate back-to-back retries.
-        enable-exponential-backoff: true
-        exponential-backoff-multiplier: 2
-        retry-exceptions:
-          - com.easyshop.payment.gateway.PaymentGatewayException
+      orderInternal: { baseConfig: default }
+
+# =============================================================================
+# Actuator — add to every service with a breaker.
+# =============================================================================
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics,circuitbreakers
+        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
   health:
     circuitbreakers:
       enabled: true
