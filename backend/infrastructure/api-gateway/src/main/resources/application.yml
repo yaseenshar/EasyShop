@@ -53,26 +53,51 @@ spring:
               uri: lb://user-service
               predicates:
                 - Path=/api/v1/users/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: userCb
+                    fallbackUri: forward:/fallback/user
 
             - id: catalog-service
               uri: lb://catalog-service
               predicates:
                 - Path=/api/v1/products/**,/api/v1/categories/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: catalogCb
+                    fallbackUri: forward:/fallback/catalog
 
             - id: order-service
               uri: lb://order-service
               predicates:
                 - Path=/api/v1/orders/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: orderCb
+                    fallbackUri: forward:/fallback/order
 
             - id: cart-service
               uri: lb://cart-service
               predicates:
                 - Path=/api/v1/cart/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: cartCb
+                    fallbackUri: forward:/fallback/cart
 
             - id: review-service
               uri: lb://review-service
               predicates:
                 - Path=/api/v1/reviews/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: reviewCb
+                    fallbackUri: forward:/fallback/review
 
             # Still deliberately UNROUTED: payment-service and
             # inventory-service (Kafka-driven only), notification-service
@@ -147,14 +172,86 @@ eureka:
     service-url:
       defaultZone: http://localhost:8761/eureka/
 
+# =============================================================================
+# Actuator
+# =============================================================================
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,gateway
+        include: health,info,prometheus,gateway,circuitbreakers,circuitbreakerevents
   endpoint:
     gateway:
       # Exposure alone is insufficient - the gateway endpoint's default
       # access level is "none" because route introspection is more
       # sensitive than health/info. Needs this explicit grant.
       access: unrestricted
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+
+
+
+# =============================================================================
+# Resilience4j — reactive instances used by the filters above.
+# The filter's `name:` arg maps to the instance names here.
+# =============================================================================
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: TIME_BASED     # COUNT_BASED never fills on a
+        # low-traffic dev gateway
+        slidingWindowSize: 120            # seconds. Must exceed
+          # minimumNumberOfCalls x worst-case call duration, or a sustained
+          # hard-down dependency NEVER trips the breaker: with the old value
+          # of 30s, 10 sequential calls each eaten by orderCb's 8s TimeLimiter
+          # timeout take up to 80s to accumulate, so the earliest ones age out
+          # of the window before the 10th arrives and bufferedCalls plateaus
+          # below minimumNumberOfCalls forever (confirmed empirically via
+          # verify-circuit-breakers.sh — the breaker never opened under a
+          # continuous-timeout outage). 120s comfortably covers that with margin.
+        minimumNumberOfCalls: 10          # DEV VALUE. Library default is 100 —
+          # with that, the breaker NEVER opens
+          # in dev and looks broken. Raise for
+        # prod → add to the §7 reversal list.
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50         # a slow dependency is worse than a
+        # dead one — failure rate alone misses it
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        registerHealthIndicator: true
+    instances:
+      catalogCb: { baseConfig: default }
+      userCb:    { baseConfig: default }
+      orderCb:   { baseConfig: default }
+      cartCb:    { baseConfig: default }
+      reviewCb:  { baseConfig: default }
+
+  # ---------------------------------------------------------------------------
+  # TimeLimiter — REQUIRED, and the #1 gateway trap.
+  #
+  # Spring Cloud CircuitBreaker applies a TimeLimiter with a DEFAULT TIMEOUT OF
+  # 1 SECOND. If you configure nothing here, every downstream call slower than
+  # 1s becomes a fallback — you will think the breaker is misfiring when it is
+  # obeying a default you never set.
+  #
+  # Set from observed p95/p99, not round numbers.
+  # ---------------------------------------------------------------------------
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 4s
+        cancelRunningFuture: true
+    instances:
+      catalogCb: { baseConfig: default }
+      userCb:    { baseConfig: default }
+      orderCb:   { baseConfig: default, timeoutDuration: 8s }  # checkout starts
+      # a saga — slower
+      cartCb:    { baseConfig: default }
+      reviewCb:  { baseConfig: default }

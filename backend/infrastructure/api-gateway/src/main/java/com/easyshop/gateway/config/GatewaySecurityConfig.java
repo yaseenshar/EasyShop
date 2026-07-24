@@ -77,6 +77,13 @@ public class GatewaySecurityConfig {
                         // application.yml (that setting only unlocks actuator's OWN
                         // access level - it does nothing without this permitAll too).
                         .pathMatchers("/actuator/gateway/**").permitAll()
+                        // Circuit breaker introspection: dev-only, matches
+                        // management.endpoints.web.exposure.include listing
+                        // circuitbreakers/circuitbreakerevents in application.yml -
+                        // without this the endpoints are exposed but still fall
+                        // through to .anyExchange().authenticated() below and 401,
+                        // which is what verify-circuit-breakers.sh catches.
+                        .pathMatchers("/actuator/circuitbreakers/**", "/actuator/circuitbreakerevents/**").permitAll()
                         // Public reads: catalog browsing and review summaries need no
                         // token (verify-e2e.sh §4). Only GET is opened - creating a
                         // review, moderating, or writing a product still requires auth

@@ -29,8 +29,20 @@ spring:
   # Boot 4 pattern: per-group properties under spring.http.client.service).
   http:
     client:
+      # Fleet-wide default for blocking HTTP clients
+      connect-timeout: 2s
+      read-timeout: 3s
+
       service:
         group:
+          # Group name must match your @ImportHttpServices registration.
+          order-client:
+            # base-url: lb://order-service     # §9: lb:// syntax here is
+            #                                  # flagged-unverified; the direct
+            #                                  # host URL is the fallback
+            connect-timeout: 1s
+            read-timeout: 2s     # a Verified-Purchase badge must never hold a
+            # page render. Set from observed p95/p99.
           order-service:
             # lb:// relies on Spring Cloud 2025.1's confirmed load-balancing
             # support for HTTP service groups resolving through Eureka.
@@ -48,17 +60,6 @@ spring:
         jwt:
           issuer-uri: http://localhost:8090/realms/easyshop
 
-resilience4j:
-  circuitbreaker:
-    instances:
-      orderService:
-        failure-rate-threshold: 50
-        sliding-window-size: 10
-        sliding-window-type: COUNT_BASED
-        wait-duration-in-open-state: 15s
-        permitted-number-of-calls-in-half-open-state: 3
-        automatic-transition-from-open-to-half-open-enabled: true
-
 eureka:
   client:
     service-url:
@@ -66,14 +67,116 @@ eureka:
   instance:
     prefer-ip-address: true
 
+  # =============================================================================
+  # Shared resilience config — paste into EVERY service that has a breaker
+  # (payment-service, review-service, catalog-service).
+  #
+  # Same YAML-anchor consolidation applies as the OIDC block (§6.5) if you want
+  # it in one place; kept per-service here so each file remains readable and
+  # the instance overrides sit next to their base.
+  # =============================================================================
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: TIME_BASED
+        slidingWindowSize: 30
+        minimumNumberOfCalls: 10        # library default is 100 → breaker never
+          # opens in dev. Prod value belongs on the
+        # §7 dev-only reversal list.
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        registerHealthIndicator: true
+
+        # ---------------------------------------------------------------------
+        # 4xx IS NOT A DOWNSTREAM FAILURE.
+        # A 404 from order-service means "no such order", not "order-service is
+        # sick". Counting client errors lets one bad request pattern open the
+        # breaker for every user. ignoreExceptions takes precedence over
+        # recordExceptions, so listing here is unambiguous.
+        #
+        # Adjust the exception types to whatever your HTTP client actually
+        # throws — RestClient throws HttpClientErrorException; a @HttpExchange
+        # interface may surface something else. VERIFY by forcing a 404 and
+        # reading the stack trace (§6.3), then confirm the breaker's
+        # failure count did NOT move.
+        # ---------------------------------------------------------------------
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
+        recordExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - org.springframework.web.client.ResourceAccessException  # timeouts, conn refused
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+
+    instances:
+      # ---- review-service -----------------------------------------------------
+      # Existing breaker on PurchaseVerifier (§4.12 / §6.1 self-invocation fix).
+      # Name must match the @CircuitBreaker(name = "...") already in the code.
+      orderInternal:
+        baseConfig: default
+        slowCallDurationThreshold: 1s   # a badge lookup must never hold a page
+
+      # ---- payment-service ----------------------------------------------------
+      # Existing breaker on the external charge path.
+      paymentGateway:
+        baseConfig: default
+        waitDurationInOpenState: 30s    # payment provider outages last longer;
+        # hammering an unhealthy PSP is worse
+        slowCallDurationThreshold: 5s   # PSPs are legitimately slow
+
+      # ---- catalog-service (optional, see README) -----------------------------
+      # Redis here is a CACHE (§4.9) — falling back to MySQL is real degradation.
+      catalogCache:
+        baseConfig: default
+        waitDurationInOpenState: 5s
+
+  # ---------------------------------------------------------------------------
+  # Retry — only where the operation is idempotent.
+  # Default aspect order puts Retry OUTSIDE CircuitBreaker, so each attempt
+  # records its own breaker failure (N retries consume N window slots).
+  # Never attach retry to the payment charge itself; the idempotency key
+  # (§4.8) is what makes a retry safe, not the breaker.
+  # ---------------------------------------------------------------------------
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 200ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
+    instances:
+      orderInternal: { baseConfig: default }
+
+# =============================================================================
+# Actuator — add to every service with a breaker.
+# =============================================================================
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics,circuitbreakers
+        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
   health:
     circuitbreakers:
       enabled: true
   tracing:
     sampling:
       probability: 1.0
+
+# HEALTH INDICATOR WARNING:
+# An OPEN breaker contributing DOWN to /actuator/health means Eureka may
+# deregister a perfectly healthy service because its DEPENDENCY is sick —
+# removing capacity during a partial outage. Verify the aggregate status while
+# a breaker is open (verify-circuit-breakers.sh step 6 does this). If it
+# reports DOWN, add `allowHealthIndicatorToFail: false` to the config block.
+

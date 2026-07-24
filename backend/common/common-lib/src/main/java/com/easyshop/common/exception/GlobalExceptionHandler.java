@@ -6,13 +6,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.MissingRequestValueException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.web.HttpRequestMethodNotSupportedException;
 import java.util.stream.Collectors;
 
 /**
@@ -128,22 +126,12 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("Malformed request body", "VALIDATION_ERROR"));
     }
 
-    /**
-     * Missing required @RequestParam/@RequestHeader (e.g. checkout's
-     * Idempotency-Key header omitted). A 400 - the request is malformed,
-     * not the server.
-     */
-    @ExceptionHandler(MissingRequestValueException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingValue(MissingRequestValueException ex) {
-        return ResponseEntity.badRequest()
-                .body(ApiResponse.error(ex.getMessage(), "VALIDATION_ERROR"));
-    }
-
-    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(ApiResponse.error(ex.getMessage(), "METHOD_NOT_ALLOWED"));
-    }
+    // HttpRequestMethodNotSupportedException and MissingRequestValueException
+    // handlers live in ServletExceptionHandler, NOT here - both transitively
+    // extend jakarta.servlet.ServletException, so on a pure-WebFlux service
+    // (api-gateway) with no servlet API on the classpath, referencing them
+    // here crashes the whole bean with NoClassDefFoundError at startup. See
+    // ServletExceptionHandler's javadoc for the full story.
 
     // AccessDeniedException/AuthenticationException handlers live in
     // SecurityExceptionHandler, NOT here - see its javadoc for why splitting
