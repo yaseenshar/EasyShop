@@ -1,6 +1,7 @@
 package com.easyshop.order.controller;
 
 import com.easyshop.common.dto.response.ApiResponse;
+import com.easyshop.common.idempotency.Idempotent;
 import com.easyshop.order.dto.OrderDtos.CreateOrderRequest;
 import com.easyshop.order.dto.OrderDtos.OrderResponse;
 import com.easyshop.order.dto.OrderDtos.PagedResponse;
@@ -41,20 +42,21 @@ public class OrderController {
 
     /**
      * The checkout endpoint - the single most important idempotency boundary
-     * in the entire system (full deep-dive coming in Phase 4, but the
-     * essential mechanism is introduced here since the saga depends on it).
+     * in the entire system.
+     *
+     * TWO layers, not one: @Idempotent is the Redis FAST PATH - it short-circuits
+     * a duplicate BEFORE this method body runs at all, replaying the original
+     * response verbatim (same status, same body, "Idempotent-Replayed: true").
+     * The orderRepository.findByIdempotencyKey check below is the DB CORRECTNESS
+     * BACKSTOP for the rare miss (Redis failed open, or the SET-NX/GET race) -
+     * it stays exactly as it was before Redis was added.
      *
      * Idempotency-Key is a CLIENT-supplied header, generated once per checkout
      * attempt (e.g. when the user lands on the checkout page, the Angular
      * frontend generates a UUID and reuses it across retries of the SAME
      * attempt - a page refresh or "new" checkout click generates a fresh key).
-     *
-     * If a request with the same key arrives again (double-click, client
-     * retry after a timeout, etc.), we return the EXISTING order instead of
-     * creating a duplicate - this is what makes a POST endpoint safe to retry,
-     * which is otherwise impossible for a naturally non-idempotent operation
-     * like "create an order."
      */
+    @Idempotent(required = true)
     @PostMapping
     @Transactional
     public ResponseEntity<ApiResponse<OrderResponse>> createOrder(

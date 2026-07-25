@@ -49,6 +49,15 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Redis for the @Idempotent checkout engine (common-lib's dependency
+             is optional=true so it doesn't leak into services that don't need
+             it - order-service does, so it declares it directly here, same
+             pattern as payment-service). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-flyway</artifactId>
