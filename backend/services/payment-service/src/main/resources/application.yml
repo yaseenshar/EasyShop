@@ -134,8 +134,15 @@ resilience4j:
   # Retry — only where the operation is idempotent.
   # Default aspect order puts Retry OUTSIDE CircuitBreaker, so each attempt
   # records its own breaker failure (N retries consume N window slots).
-  # Never attach retry to the payment charge itself; the idempotency key
-  # (§4.8) is what makes a retry safe, not the breaker.
+  #
+  # @Retry(name = "paymentGateway") on PaymentGatewayClient.charge() IS safe
+  # today because the gateway call is fully SIMULATED (no real PSP, no side
+  # effect to duplicate) - see that class's javadoc. The moment it's swapped
+  # for a real PSP integration, this retry must not survive unmodified: a real
+  # charge is not naturally idempotent, and only an idempotency key (per-charge,
+  # sent to the PSP so a retried request can't double-charge) makes retrying
+  # that call safe. Re-verify this the day PaymentGatewayClient stops being a
+  # stand-in.
   # ---------------------------------------------------------------------------
   retry:
     configs:
@@ -147,7 +154,7 @@ resilience4j:
         ignoreExceptions:
           - org.springframework.web.client.HttpClientErrorException
     instances:
-      orderInternal: { baseConfig: default }
+      paymentGateway: { baseConfig: default }
 
 # =============================================================================
 # Actuator — add to every service with a breaker.
@@ -157,7 +164,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents
+        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents,retries,retryevents
   endpoint:
     health:
       show-details: always

@@ -43,11 +43,39 @@ eureka:
   instance:
     prefer-ip-address: true
 
+# =============================================================================
+# Retry — the canonical transient-DB-failure case: optimistic-lock contention
+# on product_stock under a flash sale (see StockReservationTxn's javadoc).
+# name must match @Retry(name = "stockReservation") on
+# StockReservationService.reserve(), or this silently falls back to library
+# defaults (maxAttempts=3, no backoff, no exception filtering).
+# =============================================================================
+resilience4j:
+  retry:
+    instances:
+      stockReservation:
+        maxAttempts: 5
+        waitDuration: 50ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        # De-synchronise threads that lost the same optimistic race together -
+        # un-jittered backoff makes them all retry at the same instant and
+        # collide again.
+        enableRandomizedWait: true
+        randomizedWaitFactor: 0.5
+        # ONLY the transient signal. Insufficient stock / product-not-found
+        # are ordinary ReservationOutcome return values, never exceptions, so
+        # they can never be retried regardless of this list - explicitly
+        # scoping retryExceptions is still worth doing so an unrelated future
+        # exception type doesn't silently start getting retried too.
+        retryExceptions:
+          - org.springframework.orm.ObjectOptimisticLockingFailureException
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics,retries,retryevents
   tracing:
     sampling:
       probability: 1.0

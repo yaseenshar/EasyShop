@@ -28,7 +28,17 @@ public class InventorySagaListener {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "inventory.reserve-stock.command", groupId = "inventory-service")
+    // concurrency=3 (matches the topic's 3 partitions, see order-service's
+    // KafkaConfig#inventoryReserveCommandTopic): the default concurrency=1
+    // serializes every reserve command onto a single thread, which means two
+    // orders for the SAME product can never actually race on product_stock's
+    // @Version - the exact contention @Retry above exists to handle (verified
+    // live: with concurrency=1, 20 concurrent checkouts produced zero retry
+    // events because inventory-service processed them one at a time).
+    // Messages are keyed by orderId (OutboxPublisher), so different orders
+    // for the same product land on different partitions/threads and can
+    // genuinely overlap.
+    @KafkaListener(topics = "inventory.reserve-stock.command", groupId = "inventory-service", concurrency = "3")
     public void onReserveCommand(ReserveStockCommand command, Acknowledgment ack) {
         try {
             handleReserveCommand(command);

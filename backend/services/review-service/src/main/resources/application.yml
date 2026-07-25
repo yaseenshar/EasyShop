@@ -137,21 +137,42 @@ resilience4j:
         waitDurationInOpenState: 5s
 
   # ---------------------------------------------------------------------------
-  # Retry — only where the operation is idempotent.
-  # Default aspect order puts Retry OUTSIDE CircuitBreaker, so each attempt
-  # records its own breaker failure (N retries consume N window slots).
-  # Never attach retry to the payment charge itself; the idempotency key
-  # (§4.8) is what makes a retry safe, not the breaker.
+  # DELIBERATELY NO retry config for "orderInternal" - PurchaseVerifier has no
+  # @Retry (see its javadoc): a transient blip on a best-effort verified-
+  # purchase badge isn't worth retrying, and retry would hit the MDC-cleared-
+  # before-retry quirk on the thread-pool path. Retry belongs on inventory-
+  # service's optimistic-lock path (resilience4j.retry.instances.stockReservation
+  # there), not here.
   # ---------------------------------------------------------------------------
-  retry:
+
+  # ---------------------------------------------------------------------------
+  # Thread-pool bulkhead — isolates review-service's Tomcat threads from a slow
+  # order-service (see PurchaseVerifier's javadoc for the full "why").
+  # pool(4) + queue(8): sized so a concurrency burst well past that (the verify
+  # script's default CONCURRENCY=20) reliably forces BulkheadFullException
+  # instead of just queueing everything, which is the point of the isolation
+  # test - excess load must be REJECTED fast, not absorbed unboundedly.
+  # ---------------------------------------------------------------------------
+  thread-pool-bulkhead:
     configs:
       default:
-        maxAttempts: 3
-        waitDuration: 200ms
-        enableExponentialBackoff: true
-        exponentialBackoffMultiplier: 2
-        ignoreExceptions:
-          - org.springframework.web.client.HttpClientErrorException
+        maxThreadPoolSize: 4
+        coreThreadPoolSize: 4
+        queueCapacity: 8
+        keepAliveDuration: 20ms
+    instances:
+      orderInternal: { baseConfig: default }
+
+  # ---------------------------------------------------------------------------
+  # TimeLimiter for the same "orderInternal" call - without this, @TimeLimiter
+  # falls back to resilience4j's 1s library default, which is accidental, not
+  # deliberate. A verified-purchase badge must never hold a page render.
+  # ---------------------------------------------------------------------------
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 2s
+        cancelRunningFuture: true
     instances:
       orderInternal: { baseConfig: default }
 
@@ -162,7 +183,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents
+        # NOTE: "bulkheads"/"bulkheadevents" are the ONLY bulkhead endpoint IDs
+        # resilience4j-spring-boot3 registers (verified against 2.2.0) - they
+        # cover BOTH semaphore and thread-pool bulkheads (BulkheadEndpoint merges
+        # both registries; BulkheadEventsEndpoint's getAllBulkheadEvents() flat-maps
+        # every event consumer, thread-pool included). There is no separate
+        # "threadpoolbulkheads"/"threadpoolbulkheadevents" endpoint ID to include.
+        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents,bulkheads,bulkheadevents
   endpoint:
     health:
       show-details: always

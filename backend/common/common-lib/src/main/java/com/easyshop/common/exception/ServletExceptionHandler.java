@@ -1,6 +1,8 @@
 package com.easyshop.common.exception;
 
 import com.easyshop.common.dto.response.ApiResponse;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -25,8 +27,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * CommonAutoConfiguration gates this bean on jakarta.servlet.ServletException
  * itself being resolvable, since that is the actual missing link on
  * WebFlux-only services.
+ *
+ * @Order(HIGHEST_PRECEDENCE): must resolve before GlobalExceptionHandler's
+ * Exception.class catch-all — see that class's javadoc for why order
+ * matters here at all.
  */
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class ServletExceptionHandler {
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

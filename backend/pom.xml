@@ -61,6 +61,21 @@
                 <artifactId>resilience4j-spring-boot3</artifactId>
                 <version>${resilience4j.version}</version>
             </dependency>
+            <!-- resilience4j-bulkhead: NOT pulled transitively by the fleet-wide
+                 spring-cloud-starter-circuitbreaker-resilience4j dependency below
+                 (that only drags in -circuitbreaker/-retry/-timelimiter/-core).
+                 Any service using @Bulkhead must add this explicitly. Pinned to
+                 2.3.0, not ${resilience4j.version} (2.2.0) - that's the version
+                 Maven already mediates -circuitbreaker/-retry/-timelimiter/-core
+                 to transitively (via resilience4j-spring6's own dependency on
+                 newer core modules), so this keeps the bulkhead jar aligned with
+                 the rest of the resilience4j stack actually on the classpath
+                 instead of silently drifting to a mismatched minor version. -->
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-bulkhead</artifactId>
+                <version>2.3.0</version>
+            </dependency>
             <!-- MapStruct for DTO↔Entity mapping — compile-time, no reflection -->
             <dependency>
                 <groupId>org.mapstruct</groupId>

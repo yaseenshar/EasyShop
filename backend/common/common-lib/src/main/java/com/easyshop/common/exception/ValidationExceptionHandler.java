@@ -2,6 +2,8 @@ package com.easyshop.common.exception;
 
 import com.easyshop.common.dto.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -18,8 +20,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Spring's eager Class.getDeclaredMethods() introspection - confirmed
  * empirically the same way the security split was (see that class's javadoc
  * for the full story).
+ *
+ * @Order(HIGHEST_PRECEDENCE): must resolve before GlobalExceptionHandler's
+ * Exception.class catch-all — see that class's javadoc for why order
+ * matters here at all.
  */
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class ValidationExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
