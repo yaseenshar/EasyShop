@@ -306,6 +306,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: {condition: service_started}
     networks: [easyshop-network]
 
   order-service:
@@ -319,10 +320,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_order
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
     depends_on:
       postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: {condition: service_started}
     networks: [easyshop-network]
 
   payment-service:
@@ -343,6 +348,7 @@ services:
       kafka: { condition: service_healthy }
       redis: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: {condition: service_started}
     networks: [easyshop-network]
 
   inventory-service:
@@ -361,6 +367,7 @@ services:
       mysql: { condition: service_healthy }
       kafka: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: { condition: service_started }
     networks: [easyshop-network]
 
   catalog-service:
@@ -380,6 +387,7 @@ services:
       mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: { condition: service_started }
     networks: [easyshop-network]
 
   review-service:
@@ -396,6 +404,7 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: { condition: service_started }
     networks: [easyshop-network]
 
   cart-service:
@@ -411,6 +420,7 @@ services:
     depends_on:
       redis: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: {condition: service_started}
     networks: [easyshop-network]
 
   notification-service:
@@ -428,6 +438,7 @@ services:
       kafka: { condition: service_healthy }
       redis: { condition: service_healthy }
       service-discovery: { condition: service_started }
+      api-gateway: {condition: service_started}
     networks: [easyshop-network]
 
   # ═══════════════════ ON-DEMAND TOOLS (profiles) ═══════════════════════════

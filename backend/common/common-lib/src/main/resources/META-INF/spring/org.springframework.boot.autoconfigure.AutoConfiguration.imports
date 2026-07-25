@@ -1,2 +1,3 @@
 com.easyshop.common.config.CommonAutoConfiguration
 com.easyshop.common.security.SecurityCommonAutoConfiguration
+com.easyshop.common.idempotency.IdempotencyAutoConfiguration
