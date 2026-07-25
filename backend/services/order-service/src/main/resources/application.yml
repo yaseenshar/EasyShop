@@ -29,6 +29,16 @@ spring:
       host: localhost
       port: 6379
       password: ${REDIS_PASSWORD}
+      # WITHOUT this, Lettuce's default 60s command timeout means a Redis
+      # that's unresponsive (paused/frozen/network-partitioned - NOT the same
+      # as cleanly refusing connections) hangs @Idempotent's store.begin()
+      # call for up to 60s. The gateway's own circuit breaker (8s TimeLimiter
+      # on the order route) trips LONG before that and returns its OWN 503
+      # fallback - onRedisFailure=OPEN never gets a chance to run, because the
+      # DataAccessException it catches never arrives in time. Verified live:
+      # without this, pausing Redis made checkout WORSE (hang -> breaker trip)
+      # instead of the intended "process anyway" degradation.
+      timeout: 500ms
       lettuce:
         pool:
           max-active: 16

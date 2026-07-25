@@ -34,6 +34,15 @@ spring:
       # share a single connection across threads, whereas Jedis traditionally
       # needed a connection pool per thread. Worth knowing this is WHY Boot
       # defaults to Lettuce if asked in an interview.
+      #
+      # timeout, explicitly: without it Lettuce's default 60s command timeout
+      # means an unresponsive (not just down) Redis hangs PaymentSagaListener/
+      # RefundSagaListener's store.begin() call for up to 60s per delivery -
+      # onRedisFailure=OPEN's catch(DataAccessException) never fires in time
+      # to matter, and a slow-not-dead Redis stalls the Kafka consumer thread
+      # instead of degrading. See order-service's application.yml for the
+      # same fix and the live-verified failure mode this closes.
+      timeout: 500ms
       lettuce:
         pool:
           max-active: 16

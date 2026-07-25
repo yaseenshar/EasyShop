@@ -37,7 +37,34 @@ public final class SagaMessages {
             UUID userId,
             BigDecimal amount,
             String currency,
+            // Client-facing key, kept for audit trail - NOT what payment-service
+            // dedupes on anymore (see commandId). Two key-spaces, kept separate:
+            // this is the order-level key; commandId is the payment-command-level
+            // key (SagaIdempotencyKeys). Conflating them was the original design's
+            // gap - a redelivery and a genuinely-new command for the same order
+            // must be distinguishable, which idempotencyKey alone can't do if a
+            // future flow ever issues more than one charge attempt per order.
             String idempotencyKey,
+            // Stamped once by the orchestrator when the command is first built
+            // (see OrderSagaOrchestrator#handleStockReservationReply) and baked
+            // into the outbox event's JSON payload, so every Kafka redelivery of
+            // THIS message carries the identical value - the determinism
+            // SagaIdempotencyKeys.charge() depends on.
+            UUID commandId,
+            Instant issuedAt
+    ) {}
+
+    /**
+     * The reversal/void path - its own operation, its own key-space
+     * (SagaIdempotencyKeys.refund), never sharing commandId semantics with a
+     * charge for the same order. See RefundSagaListener (payment-service) for
+     * why this exists: the charge already had idempotency, the reversal did
+     * not - a double refund is a direct financial loss, not a display bug.
+     */
+    public record RefundPaymentCommand(
+            UUID orderId,
+            UUID originalTransactionId,
+            UUID commandId,
             Instant issuedAt
     ) {}
 

@@ -58,6 +58,11 @@ public class KafkaConfig {
     }
 
     @Bean
+    public NewTopic paymentRefundCommandTopic() {
+        return TopicBuilder.name(SagaTopics.PAYMENT_REFUND_COMMAND).partitions(1).replicas(1).build();
+    }
+
+    @Bean
     public NewTopic orderEventsTopic() {
         return TopicBuilder.name(SagaTopics.ORDER_EVENTS).partitions(1).replicas(1).build();
     }

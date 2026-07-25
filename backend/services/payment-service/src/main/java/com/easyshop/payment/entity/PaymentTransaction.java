@@ -42,11 +42,25 @@ public class PaymentTransaction {
     @Column(name = "failure_reason")
     private String failureReason;
 
+    @Column(name = "refund_reference")
+    private String refundReference;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    // Optimistic locking: markRefunded()'s "only from SUCCEEDED" guard is only
+    // a genuine race-safe backstop WITH this. Without @Version, two concurrent
+    // refund attempts could both read status=SUCCEEDED, both pass the guard,
+    // and both commit (last write wins) - no DB-level protection against a
+    // double refund. WITH it, the loser's update throws
+    // ObjectOptimisticLockingFailureException, which RefundSagaListener treats
+    // as "someone else already handled this" rather than a real failure.
+    @Version
+    @Column(nullable = false)
+    private int version;
 
     protected PaymentTransaction() {}
 
@@ -72,6 +86,18 @@ public class PaymentTransaction {
         this.failureReason = reason;
     }
 
+    /** Only a SUCCEEDED transaction can be refunded - refunding a FAILED or
+     *  already-PROCESSING charge would be refunding money that was never
+     *  taken. RefundSagaListener enforces this before calling in. */
+    public void markRefunded(String refundReference) {
+        if (this.status != PaymentStatus.SUCCEEDED) {
+            throw new IllegalStateException(
+                    "Cannot refund a transaction in status " + this.status + " (must be SUCCEEDED)");
+        }
+        this.status = PaymentStatus.REFUNDED;
+        this.refundReference = refundReference;
+    }
+
     @PrePersist
     protected void onCreate() {
         Instant now = Instant.now();
@@ -85,6 +111,6 @@ public class PaymentTransaction {
     }
 
     public enum PaymentStatus {
-        PROCESSING, SUCCEEDED, FAILED
+        PROCESSING, SUCCEEDED, FAILED, REFUNDED
     }
 }
