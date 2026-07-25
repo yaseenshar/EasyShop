@@ -115,10 +115,22 @@ echo "=== 6. Saga smoke test: order through the full pipeline ==============="
 # ACCEPTED (202) immediately; the saga then runs async through Kafka:
 # reserve -> charge -> confirm. We poll for a terminal state.
 IDEMPOTENCY_KEY=$(uuidgen)
+# ORDER_BODY is built ONCE and reused VERBATIM in both calls below - the
+# replay call must send byte-identical bytes to the original for it to be a
+# genuine replay. @Idempotent fingerprints the raw request body (see
+# common-lib's IdempotencyInterceptor), so even whitespace-only differences
+# between two otherwise-equivalent JSON payloads (e.g. from reformatting one
+# of two duplicated curl -d literals at different indentation levels) are
+# enough to trip the 422 (fingerprint mismatch) "reused with a different
+# request" path - the engine is working as designed, but two independently
+# formatted literals are a foot-gun for a script that intends a true replay.
+# A genuinely different shippingAddressId is a SEPARATE, deliberate case
+# (same key, different body -> 422) exercised in verify-idempotency.sh.
+SHIPPING_ADDRESS_ID=$(uuidgen)
+ORDER_BODY="{\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":19.99}],\"shippingAddressId\":\"$SHIPPING_ADDRESS_ID\"}"
 ORDER_RESPONSE=$(curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
   -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
-  -d "{\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":19.99}],
-       \"shippingAddressId\":\"$(uuidgen)\"}" \
+  -d "$ORDER_BODY" \
   "$GATEWAY/api/v1/orders")
 ORDER_ID=$(echo "$ORDER_RESPONSE" | jq -r '.data.id')
 
@@ -142,8 +154,7 @@ if [ "$ORDER_ID" != "null" ] && [ -n "$ORDER_ID" ]; then
   # Idempotency replay: same key must return the SAME order, not a new one
   REPLAY_ID=$(curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
     -H "Idempotency-Key: $IDEMPOTENCY_KEY" \
-    -d "{\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1,\"unitPrice\":19.99}],
-         \"shippingAddressId\":\"$(uuidgen)\"}" \
+    -d "$ORDER_BODY" \
     "$GATEWAY/api/v1/orders" | jq -r '.data.id')
   [ "$REPLAY_ID" = "$ORDER_ID" ] \
     && { echo "  PASS  idempotency: replay returned same order"; PASS=$((PASS+1)); } \

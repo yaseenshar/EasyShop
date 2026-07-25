@@ -109,6 +109,14 @@ spring:
       host: localhost
       port: 6379
       password: ${REDIS_PASSWORD}
+      # WITHOUT this, Lettuce's default 60s command timeout means the
+      # RedisRateLimiter filter (used by every route above) hangs on an
+      # unresponsive-but-not-refusing Redis. Live-verified: pausing Redis made
+      # EVERY route through this gateway take exactly 8s and 503 via orderCb's
+      # own TimeLimiter (tripped by the hang, not by order-service, which
+      # responds in <1s once its OWN identical Redis timeout is set - see
+      # order-service/application.yml's twin fix and comment for the full story).
+      timeout: 500ms
 
   security:
     oauth2:

@@ -36,11 +36,15 @@ public class PaymentGatewayClient implements PaymentGateway {
     @Override
     @CircuitBreaker(name = "paymentGateway", fallbackMethod = "chargeFallback")
     @Retry(name = "paymentGateway")
-    public GatewayResult charge(UUID orderId, BigDecimal amount, String currency) {
+    public GatewayResult charge(UUID orderId, BigDecimal amount, String currency, String pspIdempotencyKey) {
         // Simulated gateway call - replace with a real HTTP client (e.g. via
         // Spring Boot 4's new @HttpServiceClient, see Phase 2 notes) calling
-        // Stripe's PaymentIntents API or equivalent.
-        log.info("Calling payment gateway for order {} amount {} {}", orderId, amount, currency);
+        // Stripe's PaymentIntents API or equivalent. A real integration sends
+        // pspIdempotencyKey as the Idempotency-Key header on that call - this
+        // simulation has no state to dedupe against, so it's accepted but
+        // unused here (logged so it's visible the plumbing is in place).
+        log.info("Calling payment gateway for order {} amount {} {} (idempotencyKey={})",
+                orderId, amount, currency, pspIdempotencyKey);
 
         simulateNetworkLatency();
 
@@ -61,6 +65,25 @@ public class PaymentGatewayClient implements PaymentGateway {
         return GatewayResult.success("gw_" + UUID.randomUUID());
     }
 
+    @Override
+    @CircuitBreaker(name = "paymentGateway", fallbackMethod = "refundFallback")
+    @Retry(name = "paymentGateway")
+    public GatewayResult refund(UUID originalTransactionId, String pspIdempotencyKey) {
+        log.info("Calling payment gateway to refund transaction {} (idempotencyKey={})",
+                originalTransactionId, pspIdempotencyKey);
+
+        simulateNetworkLatency();
+
+        if (ThreadLocalRandom.current().nextInt(100) < 5) {
+            throw new PaymentGatewayException("Simulated gateway timeout");
+        }
+
+        // Unlike a charge, a refund against a real prior transaction has no
+        // meaningful "declined" outcome in this simulation - it either goes
+        // through or transiently fails (handled above/by the fallback).
+        return GatewayResult.success("rf_" + UUID.randomUUID());
+    }
+
     /**
      * Fallback invoked once the circuit breaker is OPEN (or Retry attempts
      * are exhausted on a genuinely failing call). Returning a clear FAILED
@@ -68,9 +91,16 @@ public class PaymentGatewayClient implements PaymentGateway {
      * compensation logic (Phase 3) handle this exactly like a card decline,
      * without needing special-case error handling for "the gateway was down."
      */
-    private GatewayResult chargeFallback(UUID orderId, BigDecimal amount, String currency, Throwable t) {
+    private GatewayResult chargeFallback(UUID orderId, BigDecimal amount, String currency,
+                                         String pspIdempotencyKey, Throwable t) {
         log.error("Payment gateway circuit breaker fallback triggered for order {}: {}",
                 orderId, t.getMessage());
+        return GatewayResult.declined("Payment gateway temporarily unavailable");
+    }
+
+    private GatewayResult refundFallback(UUID originalTransactionId, String pspIdempotencyKey, Throwable t) {
+        log.error("Payment gateway circuit breaker fallback triggered for refund of transaction {}: {}",
+                originalTransactionId, t.getMessage());
         return GatewayResult.declined("Payment gateway temporarily unavailable");
     }
 

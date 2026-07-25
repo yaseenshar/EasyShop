@@ -1,6 +1,7 @@
 package com.easyshop.order.controller;
 
 import com.easyshop.common.dto.response.ApiResponse;
+import com.easyshop.common.exception.ResourceNotFoundException;
 import com.easyshop.common.idempotency.Idempotent;
 import com.easyshop.order.dto.OrderDtos.CreateOrderRequest;
 import com.easyshop.order.dto.OrderDtos.OrderResponse;
@@ -11,6 +12,7 @@ import com.easyshop.order.repository.OrderRepository;
 import com.easyshop.order.repository.OrderSagaRepository;
 import com.easyshop.order.saga.OrderSagaOrchestrator;
 import jakarta.validation.Valid;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,12 +46,20 @@ public class OrderController {
      * The checkout endpoint - the single most important idempotency boundary
      * in the entire system.
      *
-     * TWO layers, not one: @Idempotent is the Redis FAST PATH - it short-circuits
-     * a duplicate BEFORE this method body runs at all, replaying the original
-     * response verbatim (same status, same body, "Idempotent-Replayed: true").
-     * The orderRepository.findByIdempotencyKey check below is the DB CORRECTNESS
-     * BACKSTOP for the rare miss (Redis failed open, or the SET-NX/GET race) -
-     * it stays exactly as it was before Redis was added.
+     * THREE layers, in order of who catches what:
+     *   1. @Idempotent (Redis, fast path) - short-circuits a duplicate BEFORE
+     *      this method runs at all, replaying the original response verbatim
+     *      (same status, same body, "Idempotent-Replayed: true").
+     *   2. orders.idempotency_key UNIQUE (DB, backstop) - catches the window
+     *      where Redis failed OPEN or the SET-NX/GET race slipped a second
+     *      request through. The pre-check below (findByIdempotencyKey) is the
+     *      FAST version of this for the common case; the constraint is what
+     *      actually enforces it against a genuine race.
+     *   3. THE CATCH BLOCK below - turns that constraint failure into "return
+     *      the existing order", not a 409/500. Without this, a raced duplicate
+     *      would see a bare conflict response instead of its order - correct
+     *      in that no duplicate is created, but unfriendly, and not what
+     *      "idempotent" should mean to the caller.
      *
      * Idempotency-Key is a CLIENT-supplied header, generated once per checkout
      * attempt (e.g. when the user lands on the checkout page, the Angular
@@ -58,13 +68,13 @@ public class OrderController {
      */
     @Idempotent(required = true)
     @PostMapping
-    @Transactional
     public ResponseEntity<ApiResponse<OrderResponse>> createOrder(
             @AuthenticationPrincipal Jwt jwt,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody CreateOrderRequest request) {
 
-        // Idempotency check FIRST, before any side effects.
+        // Fast pre-check, before any side effects - avoids even attempting the
+        // write (and thus a transactional round-trip) for the common case.
         var existing = orderRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             return ResponseEntity.ok(
@@ -72,34 +82,51 @@ public class OrderController {
         }
 
         UUID userId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
-
         BigDecimal total = request.items().stream()
                 .map(item -> item.unitPrice().multiply(BigDecimal.valueOf(item.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        Order order = Order.createNew(userId, total, request.shippingAddressId(), idempotencyKey);
-        Order finalOrder = order;
-        request.items().forEach(item ->
-                finalOrder.addItem(item.productId(), item.quantity(), item.unitPrice()));
+        try {
+            Order order = orchestrator.createOrderAndStartSaga(userId, total, request, idempotencyKey);
+            return ResponseEntity
+                    .status(HttpStatus.ACCEPTED) // 202, not 201 - the order is accepted
+                    // for processing, not yet confirmed. This distinction matters: a
+                    // client should poll GET /orders/{id} or listen on a websocket
+                    // for the terminal CONFIRMED/CANCELLED state.
+                    .body(ApiResponse.success("Order accepted, processing", OrderResponse.from(order)));
+        } catch (DataIntegrityViolationException dup) {
+            // Layer 3: a concurrent duplicate won the insert first. Return THAT
+            // order - do not start a second saga, do not surface a bare 409.
+            Order existingOrder = orderRepository.findByIdempotencyKey(idempotencyKey).orElseThrow(() -> dup);
+            return ResponseEntity.ok(
+                    ApiResponse.success("Order already exists for this request", OrderResponse.from(existingOrder)));
+        }
+    }
 
-        order = orderRepository.save(finalOrder);
+    /**
+     * Operator-triggered refund - see OrderSagaOrchestrator#triggerRefund's
+     * javadoc for why this isn't automatic. Only meaningful once payment
+     * actually succeeded (CONFIRMED), and idempotent against a double-click:
+     * a second call against an already-requested refund returns 200 without
+     * publishing a second RefundPaymentCommand (OrderSagaState#markRefundRequested).
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{orderId}/refund")
+    @Transactional
+    public ResponseEntity<ApiResponse<OrderResponse>> refundOrder(@PathVariable UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found: " + orderId));
+        OrderSagaState saga = sagaRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalStateException("Unknown saga: " + orderId));
 
-        OrderSagaState saga = OrderSagaState.createNew(order.getId());
-        saga = sagaRepository.save(saga);
+        if (order.getStatus() != Order.OrderStatus.CONFIRMED) {
+            throw new IllegalStateException(
+                    "Only a CONFIRMED order can be refunded (current status: " + order.getStatus() + ")");
+        }
 
-        // Kicks off the saga - writes the first outbox event in this same
-        // @Transactional method, so order creation and "saga started" are
-        // atomic with respect to each other.
-        orchestrator.startSaga(order, saga);
-
-        return ResponseEntity
-                .status(HttpStatus.ACCEPTED) // 202, not 201 - the order is accepted
-                // for processing, not yet confirmed.
-                // This distinction matters: a client
-                // should poll GET /orders/{id} or
-                // listen on a websocket for the
-                // terminal CONFIRMED/CANCELLED state.
-                .body(ApiResponse.success("Order accepted, processing", OrderResponse.from(order)));
+        boolean triggered = orchestrator.triggerRefund(order, saga);
+        String message = triggered ? "Refund requested" : "Refund already requested for this order";
+        return ResponseEntity.ok(ApiResponse.success(message, OrderResponse.from(order)));
     }
 
     /**

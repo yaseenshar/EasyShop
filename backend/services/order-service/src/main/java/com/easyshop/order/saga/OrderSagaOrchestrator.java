@@ -2,6 +2,7 @@ package com.easyshop.order.saga;
 
 import com.easyshop.common.event.OrderEvents;
 import com.easyshop.common.saga.SagaMessages;
+import com.easyshop.order.dto.OrderDtos.CreateOrderRequest;
 import com.easyshop.order.entity.Order;
 import com.easyshop.order.entity.Order.OrderStatus;
 import com.easyshop.order.entity.OrderSagaState;
@@ -16,6 +17,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -53,9 +55,43 @@ public class OrderSagaOrchestrator {
     }
 
     /**
-     * Entry point: called by OrderController right after the Order row and
-     * OrderSagaState row are first persisted (PENDING state). Kicks off the
-     * first saga step.
+     * Entry point: creates the Order + OrderSagaState rows and starts the
+     * saga, all in ONE transaction (layer 1 of the checkout idempotency
+     * design - see OrderController#createOrder's javadoc for layers 2/3).
+     *
+     * WHY THIS LIVES HERE, NOT IN OrderController: the caller needs to catch
+     * DataIntegrityViolationException from the idempotency_key UNIQUE
+     * constraint and then do a FRESH read via findByIdempotencyKey - but a
+     * read after a caught exception in the SAME @Transactional method is
+     * poisoned (the same "self-invocation crosses a bean boundary" family of
+     * trap as StockReservationTxn, see that class's javadoc): the transaction
+     * is already marked rollback-only, so the read would fail with
+     * UnexpectedRollbackException at commit instead of returning data. Moving
+     * the transactional write into ITS OWN bean method means the exception
+     * propagates out of a transaction that's already rolling back cleanly,
+     * and the caller's fallback read runs with a clean slate.
+     */
+    @Transactional
+    public Order createOrderAndStartSaga(UUID userId, BigDecimal totalAmount,
+                                         CreateOrderRequest request, String idempotencyKey) {
+        Order newOrder = Order.createNew(userId, totalAmount, request.shippingAddressId(), idempotencyKey);
+        request.items().forEach(item -> newOrder.addItem(item.productId(), item.quantity(), item.unitPrice()));
+        Order order = orderRepository.save(newOrder); // idempotency_key UNIQUE fires here on a race
+
+        OrderSagaState saga = OrderSagaState.createNew(order.getId());
+        saga = sagaRepository.save(saga);
+
+        startSaga(order, saga);
+        return order;
+    }
+
+    /**
+     * Kicks off the first saga step. Called internally by
+     * createOrderAndStartSaga right after the Order/OrderSagaState rows are
+     * first persisted (PENDING state) - self-invocation is fine here (unlike
+     * the retry case above) because the caller is ALREADY inside the
+     * transaction this method needs; there is nothing to gain from a fresh
+     * proxy hop, only a fresh transaction we deliberately do NOT want.
      */
     @Transactional
     public void startSaga(Order order, OrderSagaState saga) {
@@ -130,7 +166,10 @@ public class OrderSagaOrchestrator {
                 order.getUserId(),
                 order.getTotalAmount(),
                 order.getCurrency(),
-                order.getIdempotencyKey(), // same key reused - see Phase 4 for why
+                order.getIdempotencyKey(), // audit trail only now - see the field's javadoc in SagaMessages
+                UUID.randomUUID(), // commandId: generated ONCE here, baked into the outbox
+                // payload, so every Kafka redelivery of this exact message carries
+                // the identical value - what payment-service's dedup depends on.
                 Instant.now()
         );
 
@@ -254,6 +293,34 @@ public class OrderSagaOrchestrator {
         order.transitionTo(OrderStatus.CONFIRMED);
 
         log.info("Order {} fully confirmed - saga complete", order.getId());
+    }
+
+    /**
+     * Operator-triggered reversal (OrderController's admin refund endpoint) -
+     * NOT part of the automatic saga state machine. Per handleStockConfirmationReply's
+     * javadoc, a post-payment failure is deliberately flagged for human review
+     * rather than auto-refunded; this is that human's action once they decide
+     * a refund IS warranted.
+     *
+     * @return true if this call published the command, false if a refund was
+     *         already requested for this order (idempotent no-op - see
+     *         OrderSagaState#markRefundRequested).
+     */
+    @Transactional
+    public boolean triggerRefund(Order order, OrderSagaState saga) {
+        if (!saga.markRefundRequested()) {
+            log.info("Refund already requested for order {} - not publishing a second command", order.getId());
+            return false;
+        }
+
+        var command = new SagaMessages.RefundPaymentCommand(
+                order.getId(), saga.getPaymentTransactionId(), UUID.randomUUID(), Instant.now());
+
+        writeToOutbox("Order", order.getId(), "RefundPaymentCommand",
+                SagaTopics.PAYMENT_REFUND_COMMAND, command);
+
+        log.info("Refund requested for order {} (transaction {})", order.getId(), saga.getPaymentTransactionId());
+        return true;
     }
 
     private void publishOrderCompleted(Order order) {
