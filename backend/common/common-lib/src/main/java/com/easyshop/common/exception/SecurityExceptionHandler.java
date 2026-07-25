@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -31,8 +33,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Splitting this out and gating it on the actual Spring Security class
  * being present is what makes it safe for the whole fleet regardless of
  * which services opt into a security starter.
+ *
+ * @Order(HIGHEST_PRECEDENCE): must resolve before GlobalExceptionHandler's
+ * Exception.class catch-all — see that class's javadoc for why order
+ * matters here at all.
  */
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class SecurityExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)

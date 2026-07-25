@@ -46,7 +46,10 @@ public class ReviewService {
         // fire. Same trap applies to @Transactional, @Cacheable, @Async.
         // Crossing a bean boundary is what makes the interceptor run -
         // a subtle, high-value thing to know cold in an interview.
-        boolean verified = purchaseVerifier.isVerifiedPurchase(userId, request.productId());
+        // .join() blocks this web thread, but the ACTUAL order-service call runs
+        // on the bounded bulkhead pool - a slow order-service can never consume
+        // more than the pool's worth of threads (see PurchaseVerifier).
+        boolean verified = purchaseVerifier.hasVerifiedPurchase(userId, request.productId()).join();
 
         Review review = Review.submit(request.productId(), userId,
                 request.rating(), request.title(), request.body(), verified);

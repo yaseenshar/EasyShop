@@ -30,9 +30,16 @@ public class KafkaConfig {
     // the broker's own auto-create setting. Declared here because
     // order-service is the producer for all five - the saga orchestrator
     // that issues the commands and publishes the fan-out events.
+    // 3 partitions (not the fleet default of 1): matches
+    // InventorySagaListener#onReserveCommand's concurrency=3, so concurrent
+    // reservations for the same product (different orders, keyed by orderId
+    // below) actually land on different consumer threads and can race on
+    // product_stock's @Version - the contention @Retry(name="stockReservation")
+    // exists to handle. Spring Kafka's KafkaAdmin reconciles an existing
+    // topic's partition count up to match this bean on next startup.
     @Bean
     public NewTopic inventoryReserveCommandTopic() {
-        return TopicBuilder.name(SagaTopics.INVENTORY_RESERVE_COMMAND).partitions(1).replicas(1).build();
+        return TopicBuilder.name(SagaTopics.INVENTORY_RESERVE_COMMAND).partitions(3).replicas(1).build();
     }
 
     @Bean

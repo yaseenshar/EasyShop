@@ -1,112 +1,65 @@
 package com.easyshop.inventory.saga;
 
-import com.easyshop.inventory.entity.ProductStock;
-import com.easyshop.inventory.entity.StockReservation;
-import com.easyshop.inventory.repository.ProductStockRepository;
-import com.easyshop.inventory.repository.StockReservationRepository;
 import io.github.resilience4j.retry.annotation.Retry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
+/**
+ * OUTER bean: owns the retry, owns NO transaction. Every call below crosses
+ * the proxy boundary into txn's brand-new transaction - see
+ * StockReservationTxn's javadoc for why that split is required.
+ *
+ * confirmOrder/releaseOrder mutate the SAME @Version'd product_stock row as
+ * reserve() and are equally exposed to concurrent-writer contention (proven
+ * live: concurrent confirm/release calls for the same product raced and threw
+ * ObjectOptimisticLockingFailureException) - so they get the identical
+ * retry treatment, not just reserve().
+ */
 @Slf4j
 @Service
 public class StockReservationService {
 
+    private final StockReservationTxn txn;
 
-    private static final int MAX_RETRY_ATTEMPTS = 5;
-
-    private final ProductStockRepository stockRepository;
-    private final StockReservationRepository reservationRepository;
-
-    public StockReservationService(ProductStockRepository stockRepository, StockReservationRepository reservationRepository) {
-        this.stockRepository = stockRepository;
-        this.reservationRepository = reservationRepository;
+    public StockReservationService(StockReservationTxn txn) {
+        this.txn = txn;
     }
 
     public record ReservationOutcome(boolean success, UUID reservationId, String failureReason) {}
 
-    @Retryable(
-            retryFor = ObjectOptimisticLockingFailureException.class,
-            maxAttempts = MAX_RETRY_ATTEMPTS,
-            backoff = @Backoff(delay = 50, multiplier = 2)
-    )
-    @Transactional
+    /**
+     * name = "stockReservation" must match the resilience4j.retry.instances
+     * key, or it silently uses library defaults (maxAttempts=3, no backoff,
+     * AND no exception filtering - meaning it would retry business failures
+     * too).
+     *
+     * Retries ONLY the transient case: ObjectOptimisticLockingFailureException
+     * thrown by StockReservationTxn at commit when a concurrent writer won the
+     * @Version race. Product-not-found and insufficient-stock are ordinary
+     * return values (see ReservationOutcome), never exceptions - they can
+     * never be retried regardless of retryExceptions config, which is exactly
+     * what makes a real business failure (insufficient stock) safe to leave
+     * unfiltered.
+     *
+     * No fallbackMethod on purpose: if every retry is exhausted, the
+     * contention is pathological and the exception should propagate up to
+     * onReserveCommand's catch block, which reports it as a failure the saga
+     * compensates - not a fake success.
+     */
+    @Retry(name = "stockReservation")
     public ReservationOutcome reserve(UUID orderId, UUID productId, int quantity) {
-
-        var stockOpt = stockRepository.findByProductId(productId);
-        if (stockOpt.isEmpty()) {
-            log.warn("Product not found for reservation: {}", productId);
-            return new ReservationOutcome(false, null, "Product not found: " + productId);
-        }
-        ProductStock stock = stockOpt.get();
-
-        if (!stock.tryReserve(quantity)) {
-            log.info("Insufficient stock for productId: {} (requested {}, available {})" , productId, quantity, stock.getAvailableQty());
-            return new ReservationOutcome(false, null, "Insufficient stock: requested " + quantity + ", available " + stock.getAvailableQty());
-        }
-
-        stockRepository.save(stock);
-
-        StockReservation reservation = StockReservation.createNew(orderId, productId, quantity);
-        reservation = reservationRepository.save(reservation);
-
-        log.info("Reserved {} units of product {} for order {} (reservation {})", quantity, productId, orderId, reservation.getId());
-
-
-        return new ReservationOutcome(true, reservation.getId(), null);
+        return txn.reserve(orderId, productId, quantity);
     }
 
-    @org.springframework.retry.annotation.Recover
-    public ReservationOutcome recoverFromOptimisticLockFailure(
-            ObjectOptimisticLockingFailureException ex, UUID orderId, UUID productId, int quantity) {
-        log.error("Exhausted {} retry attempts reserving stock for product {} (order {}) - " +
-                "high contention or genuinely out of stock", MAX_RETRY_ATTEMPTS, productId, orderId);
-        return new ReservationOutcome(false, null,
-                "Unable to reserve stock after multiple attempts - product may be out of stock");
-    }
-
-    @Transactional
+    @Retry(name = "stockReservation")
     public void confirmOrder(UUID orderId) {
-
-        List<StockReservation> reservations = reservationRepository.findAllByOrderId(orderId);
-        for  (StockReservation reservation : reservations) {
-            ProductStock stock = stockRepository.findByProductId(reservation.getProductId())
-                    .orElseThrow(() -> new IllegalArgumentException("Product not found: " + reservation.getProductId()));
-
-            stock.confirmReservation(reservation.getQuantity());
-            stockRepository.save(stock);
-
-            reservation.confirm();
-
-            log.info("Confirmed reservation(s) {} for order {}", reservation.getId(), orderId);
-        }
+        txn.confirmOrder(orderId);
     }
 
-    @Transactional
+    @Retry(name = "stockReservation")
     public void releaseOrder(UUID orderId) {
-
-        List<StockReservation> reservations = reservationRepository.findAllByOrderId(orderId);
-        for  (StockReservation reservation : reservations) {
-            if(reservation.getStatus() != StockReservation.ReservationStatus.RESERVED) {
-                continue;
-            }
-
-            ProductStock stock = stockRepository.findByProductId(reservation.getProductId())
-                    .orElseThrow(() -> new IllegalArgumentException("Product not found: " + reservation.getProductId()));
-
-            stock.releaseReservation(reservation.getQuantity());
-            stockRepository.save(stock);
-            reservation.release();
-
-        }
-
-        log.info("Released {} reservation(s) for order {}", reservations.size(), orderId);
+        txn.releaseOrder(orderId);
     }
 }

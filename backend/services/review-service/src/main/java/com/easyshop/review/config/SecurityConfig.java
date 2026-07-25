@@ -51,6 +51,15 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**").permitAll()
+                        // Bulkhead introspection: dev-only, matches the explicit
+                        // management.endpoints.web.exposure.include listing in
+                        // application.yml - verify-retry-bulkhead.sh reads these
+                        // directly against review-service, not through the gateway.
+                        // "bulkheads"/"bulkheadevents" cover BOTH semaphore and
+                        // thread-pool bulkheads - there is no separate
+                        // threadpoolbulkheads endpoint ID (see application.yml note).
+                        .requestMatchers("/actuator/bulkheads/**", "/actuator/bulkheadevents/**")
+                        .permitAll()
 
                         // Real controller paths are /api/v1/reviews/moderation/queue and
                         // /api/v1/reviews/moderation/{id}/approve|reject — no path segment

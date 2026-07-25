@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import java.util.stream.Collectors;
 
 /**
@@ -30,8 +32,21 @@ import java.util.stream.Collectors;
  * response. Spring 6+ also offers RFC 7807 ProblemDetail, which is the
  * emerging standard and worth naming in an interview; mixing both would
  * mean two error shapes on one API, so we pick one deliberately.
+ *
+ * @Order(LOWEST_PRECEDENCE): ExceptionHandlerExceptionResolver walks
+ * @RestControllerAdvice beans in @Order and picks the FIRST bean whose OWN
+ * resolver matches the exception - it never compares specificity ACROSS
+ * beans. The Exception.class catch-all below matches literally everything,
+ * so without an explicit order this bean (being registered first in
+ * CommonAutoConfiguration) silently ate every exception that only
+ * SecurityExceptionHandler/ValidationExceptionHandler/ServletExceptionHandler
+ * knew how to map - AccessDeniedException, ConstraintViolationException,
+ * MissingRequestValueException/HttpRequestMethodNotSupportedException all
+ * became bare 500s instead of 403/400/405. Pinning this bean last is what
+ * lets those more specific beans run first.
  */
 @RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
