@@ -1,15 +1,5 @@
-.title { font-size: 24px; font-weight: 800; margin: 0 0 24px; }
 
-.rows { display: flex; flex-direction: column; gap: 12px; }
+.order-row { cursor: pointer; }
+.order-row:hover td { background: var(--surface-2); }
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  cursor: pointer;
-}
-
-.row-info { flex: 1; }
-.order-id { font-size: 14px; font-weight: 700; }
-
-.row-total { width: 80px; text-align: right; font-size: 14px; font-weight: 800; }
+.empty-state { display: flex; flex-direction: column; align-items: center; }

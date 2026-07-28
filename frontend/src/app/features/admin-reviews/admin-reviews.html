@@ -1,6 +1,8 @@
 <div class="page mid">
-  <h1 class="title">Review moderation queue</h1>
-  <div class="muted subtitle">{{ rows().length }} review{{ rows().length === 1 ? '' : 's' }} awaiting moderation</div>
+  <div class="page-head">
+    <h1>Review moderation</h1>
+    <span class="count">{{ rows().length }} awaiting review</span>
+  </div>
 
   @if (!loading()) {
     @if (rows().length > 0) {
@@ -8,20 +10,29 @@
         @for (row of rows(); track row.item.id) {
           <div class="card mod-row">
             <div class="mod-head">
-              <div class="product-name">{{ row.productName }}</div>
-              <div class="stars">{{ row.stars }}</div>
+              <div>
+                <div class="product-name">{{ row.productName }}</div>
+                <div class="stars">{{ row.stars }}</div>
+              </div>
+              @if (row.item.verifiedPurchase) {
+                <span class="pill pill-success">Verified purchase</span>
+              }
             </div>
             <div class="review-title">{{ row.item.title }}</div>
             <div class="review-body">{{ row.item.body }}</div>
             <div class="actions">
-              <button type="button" class="btn btn-success btn-sm" (click)="approve(row.item.id)">Approve</button>
-              <button type="button" class="btn btn-danger-outline btn-sm" (click)="reject(row.item.id)">Reject</button>
+              <button type="button" class="btn btn-success btn-sm btn-pill" (click)="approve(row.item.id)">Approve</button>
+              <button type="button" class="btn btn-danger-outline btn-sm btn-pill" (click)="reject(row.item.id)">Reject</button>
             </div>
           </div>
         }
       </div>
     } @else {
-      <p class="muted">Queue is empty &mdash; nothing awaiting moderation.</p>
+      <div class="empty-state card">
+        <div class="empty-icon">✅</div>
+        <div class="empty-msg">Queue is empty</div>
+        <p>Nothing awaiting moderation right now.</p>
+      </div>
     }
   }
 </div>

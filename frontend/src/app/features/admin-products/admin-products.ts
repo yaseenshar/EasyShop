@@ -1,7 +1,8 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { CatalogService } from '../../core/catalog.service';
 import { ToastService } from '../../core/toast.service';
+import { ProductArt } from '../../shared/product-art';
 import { Category, Product } from '../../core/api-types';
 
 interface ProductRow {
@@ -11,7 +12,7 @@ interface ProductRow {
 
 @Component({
   selector: 'app-admin-products',
-  imports: [CurrencyPipe],
+  imports: [CurrencyPipe, ProductArt],
   templateUrl: './admin-products.html',
   styleUrl: './admin-products.css',
 })
@@ -22,6 +23,24 @@ export class AdminProducts implements OnInit {
   protected readonly rows = signal<ProductRow[]>([]);
   protected readonly categories = signal<Category[]>([]);
   protected readonly loading = signal(true);
+  protected readonly search = signal('');
+  protected readonly page = signal(0);
+  protected readonly pageSize = 8;
+
+  protected readonly filteredRows = computed(() => {
+    const term = this.search().trim().toLowerCase();
+    if (!term) return this.rows();
+    return this.rows().filter(
+      (row) => row.product.name.toLowerCase().includes(term) || row.product.sku.toLowerCase().includes(term),
+    );
+  });
+
+  protected readonly totalPages = computed(() => Math.max(1, Math.ceil(this.filteredRows().length / this.pageSize)));
+
+  protected readonly pagedRows = computed(() => {
+    const start = this.page() * this.pageSize;
+    return this.filteredRows().slice(start, start + this.pageSize);
+  });
 
   protected readonly formOpen = signal(false);
   protected readonly formMode = signal<'add' | 'edit'>('add');
@@ -56,6 +75,15 @@ export class AdminProducts implements OnInit {
 
   categoryName(id: string): string {
     return this.categories().find((c) => c.id === id)?.name ?? '';
+  }
+
+  updateSearch(value: string): void {
+    this.search.set(value);
+    this.page.set(0);
+  }
+
+  goPage(delta: number): void {
+    this.page.update((p) => Math.min(Math.max(0, p + delta), this.totalPages() - 1));
   }
 
   openAddForm(): void {

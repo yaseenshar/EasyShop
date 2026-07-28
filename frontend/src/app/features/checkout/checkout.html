@@ -1,55 +1,61 @@
 <div class="page mid">
-  <h1 class="title">Checkout</h1>
+  <h1 class="page-title">Checkout</h1>
+
+  <app-stepper [steps]="checkoutSteps()" />
 
   @if (!loading()) {
     <div class="checkout-grid">
       <div>
-        <h3>Shipping address</h3>
+        <div class="card section-card">
+          <h3>Shipping address</h3>
 
-        @if (addresses().length > 0) {
-          <div class="address-list">
-            @for (addr of addresses(); track addr.id) {
-              <label class="address-option" [class.selected]="selectedAddressId() === addr.id">
-                <input
-                  type="radio"
-                  name="shipAddr"
-                  [checked]="selectedAddressId() === addr.id"
-                  (change)="selectAddress(addr.id)"
-                />
-                <div>
-                  <div class="addr-label">{{ addr.label }}</div>
-                  <div class="muted">{{ addr.line }}</div>
-                </div>
-              </label>
-            }
-          </div>
-        } @else {
-          <p class="muted">No saved addresses yet - add one to continue.</p>
-        }
+          @if (addresses().length > 0) {
+            <div class="address-list">
+              @for (addr of addresses(); track addr.id) {
+                <label class="address-option" [class.selected]="selectedAddressId() === addr.id">
+                  <input
+                    type="radio"
+                    name="shipAddr"
+                    [checked]="selectedAddressId() === addr.id"
+                    (change)="selectAddress(addr.id)"
+                  />
+                  <div>
+                    <div class="addr-label">{{ addr.label }}</div>
+                    <div class="muted">{{ addr.line }}</div>
+                  </div>
+                </label>
+              }
+            </div>
+          } @else {
+            <p class="muted">No saved addresses yet - add one to continue.</p>
+          }
 
-        <div class="card new-address-form">
-          <h3>Add an address</h3>
-          <div class="field">
-            <label>Label</label>
-            <input type="text" [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" />
-          </div>
-          <div class="field">
-            <label>Street address</label>
-            <input type="text" [value]="newLine1()" (input)="newLine1.set($any($event.target).value)" />
-          </div>
-          <div class="field">
-            <label>City</label>
-            <input type="text" [value]="newCity()" (input)="newCity.set($any($event.target).value)" />
-          </div>
-          <div class="field">
-            <label>Postal code</label>
-            <input type="text" [value]="newPostalCode()" (input)="newPostalCode.set($any($event.target).value)" />
-          </div>
-          <div class="field">
-            <label>Country code</label>
-            <input type="text" [value]="newCountryCode()" (input)="newCountryCode.set($any($event.target).value)" />
-          </div>
-          <button type="button" class="btn btn-secondary" (click)="addAddress()">Save address</button>
+          <details class="new-address-form" [attr.open]="addresses().length === 0 ? true : null">
+            <summary>Add a new address</summary>
+            <div class="form-grid">
+              <div class="field">
+                <label>Label</label>
+                <input type="text" [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" />
+              </div>
+              <div class="field">
+                <label>Street address</label>
+                <input type="text" [value]="newLine1()" (input)="newLine1.set($any($event.target).value)" />
+              </div>
+              <div class="field">
+                <label>City</label>
+                <input type="text" [value]="newCity()" (input)="newCity.set($any($event.target).value)" />
+              </div>
+              <div class="field">
+                <label>Postal code</label>
+                <input type="text" [value]="newPostalCode()" (input)="newPostalCode.set($any($event.target).value)" />
+              </div>
+              <div class="field">
+                <label>Country code</label>
+                <input type="text" [value]="newCountryCode()" (input)="newCountryCode.set($any($event.target).value)" />
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" (click)="addAddress()">Save address</button>
+          </details>
         </div>
       </div>
 
@@ -63,18 +69,23 @@
             </div>
           }
         </div>
+        <div class="summary-row muted">
+          <span>Shipping</span>
+          <span class="ship-free">Free</span>
+        </div>
         <div class="summary-total">
           <span>Total</span>
           <span>{{ cartService.cart().subtotal | currency }}</span>
         </div>
         <button
           type="button"
-          class="btn btn-primary full-width"
+          class="btn btn-primary btn-pill full-width"
           [disabled]="placing() || !selectedAddressId() || cartService.cart().items.length === 0"
           (click)="placeOrder()"
         >
-          Place order
+          {{ placing() ? 'Placing order…' : 'Place order' }}
         </button>
+        <p class="muted checkout-note">Payment is processed automatically once your order is placed.</p>
       </div>
     </div>
   }

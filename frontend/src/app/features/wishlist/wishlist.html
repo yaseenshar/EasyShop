@@ -1,0 +1,23 @@
+<div class="page">
+  <div class="page-head">
+    <h1>My wishlist</h1>
+    <span class="count">{{ cards().length }} item{{ cards().length === 1 ? '' : 's' }}</span>
+  </div>
+
+  @if (loading()) {
+    <p class="muted">Loading&hellip;</p>
+  } @else if (cards().length === 0) {
+    <div class="empty-state card">
+      <div class="empty-icon">🤍</div>
+      <div class="empty-msg">Your wishlist is empty</div>
+      <p>Tap the heart on any product to save it here.</p>
+      <a routerLink="/shop" class="btn btn-primary btn-pill">Browse products</a>
+    </div>
+  } @else {
+    <div class="wishlist-grid">
+      @for (card of cards(); track card.product.id) {
+        <app-product-card [product]="card.product" addLabel="Move to cart" (add)="moveToCart($event)" />
+      }
+    </div>
+  }
+</div>

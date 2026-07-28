@@ -1,38 +1,50 @@
-.title { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
 .subtitle { margin-bottom: 28px; }
 
-.timeline {
-  display: flex;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.timeline-step {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.dot {
-  width: 14px;
-  height: 14px;
+.confirm-head { text-align: center; margin-bottom: 32px; }
+.confirm-check {
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  z-index: 1;
+  background: var(--success-tint);
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
 }
-.dot-done { background: var(--success); }
-.dot-pending { background: var(--timeline-idle); }
-.dot-failed { background: var(--danger); }
+.confirm-check svg { width: 34px; height: 34px; }
+.confirm-check-danger { background: var(--danger-tint); color: var(--danger); }
+.confirm-title { font-size: 26px; font-weight: 800; margin: 0 0 8px; letter-spacing: 0.01em; text-transform: uppercase; }
+.confirm-head p { margin: 0 auto; max-width: 420px; }
 
-.step-label { font-size: 12px; font-weight: 700; margin-top: 8px; }
-.label-done { color: var(--ink); }
-.label-pending { color: var(--timeline-idle-text); }
-.label-failed { color: var(--danger); }
+.processing-note { text-align: center; font-size: 12px; margin-bottom: 20px; margin-top: -20px; }
+.stall-note { margin-bottom: 20px; text-align: center; }
 
-.stall-note { margin-bottom: 20px; }
-
-.lines-card { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
-.summary-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; }
+.receipt-card { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; margin-top: 12px; }
+.receipt-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.order-id-value { color: var(--primary); font-weight: 700; }
+.receipt-lines { display: flex; flex-direction: column; gap: 6px; }
+.summary-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+.ship-free { color: var(--success); font-weight: 700; }
 .bold { font-weight: 700; }
+.summary-total {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 800;
+}
 
-.actions { display: flex; gap: 12px; }
+.shipping-info { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 12px; }
+.shipping-info h4 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin: 0 0 4px; color: var(--muted); }
+.shipping-info p { margin: 0; font-size: 13px; }
+
+.actions { display: flex; gap: 12px; justify-content: center; }

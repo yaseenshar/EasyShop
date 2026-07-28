@@ -5,12 +5,49 @@
     <button type="button" class="back-link" (click)="goHome()">&larr; Back to shop</button>
 
     <div class="detail-grid">
-      <div class="hero">{{ p.sku }} &mdash; photo</div>
-      <div>
+      <div class="gallery">
+        <div class="hero-art">
+          <app-product-art [seed]="p.sku" [name]="p.name" />
+          @if (!p.active) {
+            <span class="hero-unavailable">Currently unavailable</span>
+          }
+        </div>
+        <div class="thumb-row">
+          @for (n of [0, 1, 2]; track n) {
+            <div class="thumb-art">
+              <app-product-art [seed]="p.sku + '-' + n" [name]="p.name" />
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="detail-info">
         <div class="category-label">{{ categoryName() }}</div>
-        <h1>{{ p.name }}</h1>
+        <div class="title-row">
+          <h1>{{ p.name }}</h1>
+          <button
+            type="button"
+            class="wishlist-toggle"
+            [class.active]="wishlist.has(p.id)"
+            [attr.aria-label]="wishlist.has(p.id) ? 'Remove from wishlist' : 'Save to wishlist'"
+            (click)="toggleWishlist()"
+          >
+            <svg viewBox="0 0 24 24" [attr.fill]="wishlist.has(p.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.6">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+              />
+            </svg>
+          </button>
+        </div>
         <div class="muted rating-line">{{ ratingLabel() }}</div>
-        <div class="price">{{ p.price | currency: p.currency }}</div>
+        <div class="price-row">
+          <span class="price">{{ p.price | currency: p.currency }}</span>
+          <span class="pill" [class]="p.active ? 'pill-success' : 'pill-neutral'">
+            {{ p.active ? 'In stock' : 'Unavailable' }}
+          </span>
+        </div>
         <p class="description">{{ p.description }}</p>
 
         <div class="buy-row">
@@ -19,8 +56,12 @@
             <div class="qty-value">{{ qty() }}</div>
             <button type="button" (click)="incQty()">+</button>
           </div>
-          <button type="button" class="btn btn-primary buy-btn" (click)="addToCart()">Add to cart</button>
+          <button type="button" class="btn btn-primary btn-pill buy-btn" [disabled]="!p.active" (click)="addToCart()">
+            {{ p.active ? 'Add to cart' : 'Unavailable' }}
+          </button>
         </div>
+
+        <div class="sku-line muted">SKU: <span class="mono">{{ p.sku }}</span></div>
       </div>
     </div>
 
@@ -89,5 +130,16 @@
         </div>
       }
     </div>
+
+    @if (related().length > 0) {
+      <div class="related-section">
+        <h2>You might also like</h2>
+        <div class="related-grid">
+          @for (card of related(); track card.product.id) {
+            <app-product-card [product]="card.product" [ratingLabel]="card.ratingLabel" (add)="addRelatedToCart($event)" />
+          }
+        </div>
+      </div>
+    }
   </div>
 }

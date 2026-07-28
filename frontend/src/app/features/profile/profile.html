@@ -1,42 +1,183 @@
 @if (auth.user(); as u) {
-  <div class="page narrow">
-    <h1 class="title">Profile</h1>
+  <div class="profile-shell">
+    <aside class="profile-sidebar">
+      <a routerLink="/" class="profile-brand">
+        <img src="logo.png" alt="" class="profile-brand-logo" />
+        <span class="profile-brand-word">EasyShop</span>
+      </a>
+      <span class="profile-portal-label">My account</span>
 
-    <div class="card profile-card">
-      <div class="profile-head">
-        <div class="avatar">{{ auth.initials() }}</div>
-        <div>
-          <div class="name">{{ u.firstName }} {{ u.lastName }}</div>
-          <span class="pill pill-accent">{{ u.loyaltyTier }} tier</span>
-        </div>
+      <nav class="profile-nav">
+        <button type="button" class="profile-nav-link" [class.active]="tab() === 'dashboard'" (click)="selectTab('dashboard')">
+          Dashboard
+        </button>
+        @if (auth.hasAnyRole('CUSTOMER', 'ADMIN')) {
+          <a routerLink="/orders" class="profile-nav-link">Orders</a>
+        }
+        <button type="button" class="profile-nav-link" [class.active]="tab() === 'addresses'" (click)="selectTab('addresses')">
+          Addresses
+        </button>
+        <button type="button" class="profile-nav-link" [class.active]="tab() === 'settings'" (click)="selectTab('settings')">
+          Settings
+        </button>
+      </nav>
+
+      <button type="button" class="profile-exit" (click)="signOut()">&larr; Logout</button>
+    </aside>
+
+    <div class="profile-main">
+      <app-dashboard-topbar />
+
+      <div class="page">
+        @switch (tab()) {
+          @case ('dashboard') {
+            <h1 class="page-title">User profile</h1>
+
+            <div class="card info-card">
+              <h3>Personal info</h3>
+              <div class="info-card-body">
+                <div class="avatar-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                    />
+                  </svg>
+                </div>
+                <div class="info-grid">
+                  <div>
+                    <span class="muted">Name</span><br />{{ u.firstName }} {{ u.lastName }}
+                    <span class="pill pill-accent">{{ u.loyaltyTier }} tier</span>
+                  </div>
+                  <div><span class="muted">Email</span><br />{{ u.email }}</div>
+                  <div><span class="muted">Phone</span><br />{{ u.phoneNumber || '—' }}</div>
+                  <div><span class="muted">Member since</span><br />{{ u.createdAt | date: 'mediumDate' }}</div>
+                </div>
+              </div>
+            </div>
+
+            @if (auth.hasRole('CUSTOMER')) {
+              <div class="section-header">
+                <h3>Recent orders</h3>
+                <a routerLink="/orders" class="see-all">View all &rarr;</a>
+              </div>
+              @if (loadingOrders()) {
+                <p class="muted">Loading&hellip;</p>
+              } @else if (recentOrders().length === 0) {
+                <p class="muted">No orders yet.</p>
+              } @else {
+                <div class="data-table-wrap">
+                  <table class="data-table">
+                    <thead>
+                      <tr><th>Order</th><th>Date</th><th>Status</th><th>Total</th></tr>
+                    </thead>
+                    <tbody>
+                      @for (row of recentOrders(); track row.order.id) {
+                        <tr>
+                          <td class="mono bold">{{ row.order.id.slice(0, 8).toUpperCase() }}</td>
+                          <td class="muted">{{ row.order.createdAt | date: 'mediumDate' }}</td>
+                          <td><span class="pill" [class]="row.pillClass">{{ row.order.status }}</span></td>
+                          <td class="bold">{{ row.order.totalAmount | currency: row.order.currency }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            }
+          }
+
+          @case ('addresses') {
+            <h1 class="page-title">Addresses</h1>
+
+            @if (loadingAddresses()) {
+              <p class="muted">Loading&hellip;</p>
+            } @else {
+              @if (addresses().length > 0) {
+                <div class="address-grid">
+                  @for (addr of addresses(); track addr.id) {
+                    <div class="card address-card">
+                      <div class="addr-label">
+                        {{ addr.label }}
+                        @if (addr.isDefault) {
+                          <span class="pill pill-brand">Default</span>
+                        }
+                      </div>
+                      <div class="muted">{{ addr.line }}</div>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <p class="muted">No saved addresses yet.</p>
+              }
+
+              <div class="card new-address-card">
+                <h3>Add an address</h3>
+                <div class="form-grid">
+                  <div class="field">
+                    <label>Label</label>
+                    <input type="text" [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" />
+                  </div>
+                  <div class="field">
+                    <label>Street address</label>
+                    <input type="text" [value]="newLine1()" (input)="newLine1.set($any($event.target).value)" />
+                  </div>
+                  <div class="field">
+                    <label>City</label>
+                    <input type="text" [value]="newCity()" (input)="newCity.set($any($event.target).value)" />
+                  </div>
+                  <div class="field">
+                    <label>Postal code</label>
+                    <input type="text" [value]="newPostalCode()" (input)="newPostalCode.set($any($event.target).value)" />
+                  </div>
+                  <div class="field">
+                    <label>Country code</label>
+                    <input type="text" [value]="newCountryCode()" (input)="newCountryCode.set($any($event.target).value)" />
+                  </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" [disabled]="addingAddress()" (click)="addAddress()">
+                  Save address
+                </button>
+              </div>
+            }
+          }
+
+          @case ('settings') {
+            <h1 class="page-title">Settings</h1>
+
+            <div class="card settings-card">
+              @if (editing()) {
+                <div class="edit-form">
+                  <div class="field">
+                    <label>First name</label>
+                    <input type="text" [value]="firstName()" (input)="firstName.set($any($event.target).value)" />
+                  </div>
+                  <div class="field">
+                    <label>Last name</label>
+                    <input type="text" [value]="lastName()" (input)="lastName.set($any($event.target).value)" />
+                  </div>
+                  <div class="field">
+                    <label>Phone</label>
+                    <input type="text" [value]="phoneNumber()" (input)="phoneNumber.set($any($event.target).value)" />
+                  </div>
+                  <div class="edit-actions">
+                    <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">Save</button>
+                    <button type="button" class="btn btn-secondary" (click)="cancelEdit()">Cancel</button>
+                  </div>
+                </div>
+              } @else {
+                <div class="view-info">
+                  <div><span class="muted">First name</span><br />{{ u.firstName }}</div>
+                  <div><span class="muted">Last name</span><br />{{ u.lastName }}</div>
+                  <div><span class="muted">Phone</span><br />{{ u.phoneNumber || '—' }}</div>
+                  <button type="button" class="btn btn-secondary edit-btn" (click)="startEdit()">Edit profile</button>
+                </div>
+              }
+            </div>
+          }
+        }
       </div>
-
-      @if (editing()) {
-        <div class="edit-form">
-          <div class="field">
-            <label>First name</label>
-            <input type="text" [value]="firstName()" (input)="firstName.set($any($event.target).value)" />
-          </div>
-          <div class="field">
-            <label>Last name</label>
-            <input type="text" [value]="lastName()" (input)="lastName.set($any($event.target).value)" />
-          </div>
-          <div class="field">
-            <label>Phone</label>
-            <input type="text" [value]="phoneNumber()" (input)="phoneNumber.set($any($event.target).value)" />
-          </div>
-          <div class="edit-actions">
-            <button type="button" class="btn btn-primary" [disabled]="saving()" (click)="save()">Save</button>
-            <button type="button" class="btn btn-secondary" (click)="cancelEdit()">Cancel</button>
-          </div>
-        </div>
-      } @else {
-        <div class="view-info">
-          <div><span class="muted">Email</span><br />{{ u.email }}</div>
-          <div><span class="muted">Phone</span><br />{{ u.phoneNumber || '—' }}</div>
-          <button type="button" class="btn btn-secondary edit-btn" (click)="startEdit()">Edit profile</button>
-        </div>
-      }
     </div>
   </div>
 }

@@ -13,9 +13,9 @@ import { AuthService } from './auth.service';
  *      token via its SecurityContext) — the SPA never decodes anything.
  *
  * Usage in routes:
- *   { path: 'admin/reviews',  canActivate: [roleGuard('ADMIN')], ... }
- *   { path: 'admin/products', canActivate: [roleGuard('ADMIN', 'VENDOR')], ... }
- *   { path: 'orders',         canActivate: [roleGuard('CUSTOMER', 'ADMIN')], ... }
+ *   { path: 'admin/reviews',   canActivate: [roleGuard('ADMIN')], ... }
+ *   { path: 'admin/inventory', canActivate: [roleGuard('ADMIN', 'VENDOR')], ... }
+ *   { path: 'orders',          canActivate: [roleGuard('CUSTOMER', 'ADMIN')], ... }
  *
  * The same roles drive header-menu visibility (the design's "Admin · …"
  * entries render only for ADMIN; the products entry additionally for VENDOR

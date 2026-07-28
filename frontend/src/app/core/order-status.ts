@@ -75,3 +75,20 @@ export function pollDelayMs(attempt: number): number {
   const schedule = [1_000, 2_000, 3_000];
   return schedule[attempt] ?? 5_000;
 }
+
+/** Status pill color for order-history/profile rows - shared so the two
+ *  screens can't drift on what "in progress" vs "done" looks like. */
+const STATUS_PILL_CLASS: Record<SagaStatus, string> = {
+  ORDER_CREATED: 'pill-accent',
+  RESERVING_STOCK: 'pill-accent',
+  CHARGING_PAYMENT: 'pill-accent',
+  CONFIRMING_STOCK: 'pill-accent',
+  NOTIFYING: 'pill-accent',
+  COMPENSATING: 'pill-accent',
+  CONFIRMED: 'pill-success',
+  CANCELLED: 'pill-danger',
+};
+
+export function pillClassForStatus(status: SagaStatus): string {
+  return STATUS_PILL_CLASS[status];
+}

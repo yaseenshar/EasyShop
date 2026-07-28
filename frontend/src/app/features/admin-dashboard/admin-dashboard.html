@@ -1,0 +1,105 @@
+<div class="page admin">
+  <div class="page-head">
+    <div>
+      <h1>Executive dashboard</h1>
+      <p class="muted">Welcome back, admin</p>
+    </div>
+  </div>
+
+  @if (!loading()) {
+    <div class="kpi-grid">
+      <div class="card kpi-card">
+        <div class="kpi-top">
+          <span class="kpi-label">Total products</span>
+          <span class="pill pill-brand">Catalog</span>
+        </div>
+        <div class="kpi-value">{{ totalProducts() }}</div>
+        <div class="kpi-sub muted">Across {{ categoryCount() }} categories</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-top">
+          <span class="kpi-label">Active listings</span>
+          <span class="pill pill-success">Live</span>
+        </div>
+        <div class="kpi-value">{{ activeProducts() }}</div>
+        <div class="kpi-sub muted">{{ inactiveProducts() }} deactivated</div>
+      </div>
+      <div class="card kpi-card">
+        <div class="kpi-top">
+          <span class="kpi-label">Pending reviews</span>
+          <span class="pill pill-accent">Queue</span>
+        </div>
+        <div class="kpi-value">{{ pendingReviews() }}</div>
+        <div class="kpi-sub"><a routerLink="/admin/reviews" class="kpi-link">Open moderation queue &rarr;</a></div>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="card chart-card">
+        <h3>Catalog by category</h3>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-dot legend-dot-active"></span>Active</span>
+          <span class="legend-item"><span class="legend-dot legend-dot-inactive"></span>Inactive</span>
+        </div>
+        @if (categoryBars().length > 0) {
+          <div class="bar-chart">
+            <div class="bar-gridlines">
+              <span>{{ maxBarValue() }}</span>
+              <span>{{ (maxBarValue() / 2) | number: '1.0-0' }}</span>
+              <span>0</span>
+            </div>
+            <div class="bar-groups">
+              @for (bar of categoryBars(); track bar.name) {
+                <div class="bar-group">
+                  <div class="bar-pair">
+                    <div class="bar bar-active" [style.height.%]="barHeight(bar.active)" [title]="bar.active + ' active'"></div>
+                    <div class="bar bar-inactive" [style.height.%]="barHeight(bar.inactive)" [title]="bar.inactive + ' inactive'"></div>
+                  </div>
+                  <span class="bar-label">{{ bar.name }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        } @else {
+          <p class="muted">No categories yet.</p>
+        }
+      </div>
+
+      <div class="card moderation-card">
+        <h3>Reviews awaiting moderation</h3>
+        @if (!loadingModeration()) {
+          @if (moderationRows().length > 0) {
+            <div class="mod-rows">
+              @for (row of moderationRows(); track row.item.id) {
+                <div class="mod-row">
+                  <div class="mod-row-main">
+                    <div class="mod-product">{{ row.productName }}</div>
+                    <div class="stars">{{ row.stars }}</div>
+                  </div>
+                  <span class="pill pill-neutral">Pending</span>
+                  <a routerLink="/admin/reviews" class="mod-action">Moderate &rarr;</a>
+                </div>
+              }
+            </div>
+            <a routerLink="/admin/reviews" class="view-all-link">View all &rarr;</a>
+          } @else {
+            <p class="muted">Nothing awaiting moderation.</p>
+          }
+        }
+      </div>
+    </div>
+
+    <div class="quick-links">
+      <a routerLink="/admin/inventory" class="card quick-link">
+        <div class="quick-link-title">Manage inventory</div>
+        <div class="muted">Add, edit and deactivate products</div>
+      </a>
+      <a routerLink="/admin/reviews" class="card quick-link">
+        <div class="quick-link-title">Moderate reviews</div>
+        <div class="muted">Approve or reject submitted reviews</div>
+      </a>
+    </div>
+  } @else {
+    <p class="muted">Loading&hellip;</p>
+  }
+</div>

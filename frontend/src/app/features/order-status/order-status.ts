@@ -1,12 +1,22 @@
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
-import { CurrencyPipe, DatePipe } from '@angular/common';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { CurrencyPipe, DatePipe, TitleCasePipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { OrderService } from '../../core/order.service';
 import { CatalogService } from '../../core/catalog.service';
+import { AuthService } from '../../core/auth.service';
 import { Order } from '../../core/api-types';
-import { STALL_AFTER_MS, TimelineStep, isTerminal, pollDelayMs, timelineFor } from '../../core/order-status';
+import {
+  DisplayStatus,
+  STALL_AFTER_MS,
+  TimelineStep,
+  isTerminal,
+  pollDelayMs,
+  timelineFor,
+  toDisplayStatus,
+} from '../../core/order-status';
+import { Stepper, StepperStep } from '../../shared/stepper';
 
 interface DisplayLine {
   name: string;
@@ -16,7 +26,7 @@ interface DisplayLine {
 
 @Component({
   selector: 'app-order-status',
-  imports: [CurrencyPipe, DatePipe],
+  imports: [CurrencyPipe, DatePipe, TitleCasePipe, Stepper],
   templateUrl: './order-status.html',
   styleUrl: './order-status.css',
 })
@@ -25,11 +35,36 @@ export class OrderStatusPage implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly orderService = inject(OrderService);
   private readonly catalogService = inject(CatalogService);
+  protected readonly auth = inject(AuthService);
 
   protected readonly order = signal<Order | null>(null);
   protected readonly lines = signal<DisplayLine[]>([]);
   protected readonly timeline = signal<TimelineStep[]>([]);
   protected readonly stalled = signal(false);
+
+  protected readonly displayStatus = computed<DisplayStatus | null>(() => {
+    const o = this.order();
+    return o ? toDisplayStatus(o.status) : null;
+  });
+
+  protected readonly shippingLine = computed<string | null>(() => {
+    const o = this.order();
+    if (!o) return null;
+    return this.auth.user()?.addresses.find((a) => a.id === o.shippingAddressId)?.line ?? null;
+  });
+
+  /** The timeline's first 'pending' step is the one in flight right now -
+   *  shown as the stepper's numbered "active" circle, not a plain future dot. */
+  protected readonly stepperSteps = computed<StepperStep[]>(() => {
+    let activeAssigned = false;
+    return this.timeline().map((s): StepperStep => {
+      if (s.state === 'pending' && !activeAssigned) {
+        activeAssigned = true;
+        return { label: s.label, state: 'active' };
+      }
+      return { label: s.label, state: s.state };
+    });
+  });
 
   private orderId = '';
   private pollAttempt = 0;
