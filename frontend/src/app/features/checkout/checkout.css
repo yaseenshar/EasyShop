@@ -1,4 +1,3 @@
-.title { font-size: 24px; font-weight: 800; margin: 0 0 24px; }
 
 .checkout-grid {
   display: grid;
@@ -7,28 +6,46 @@
   align-items: start;
 }
 
-h3 { font-size: 14px; font-weight: 800; margin: 0 0 12px; }
+.section-card h3,
+.order-summary h3 { font-size: 15px; font-weight: 800; margin: 0 0 14px; }
 
-.address-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.address-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
 
 .address-option {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   background: var(--surface);
   border: 1px solid var(--border-input);
   border-radius: var(--radius-card);
   padding: 14px;
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
-.address-option.selected { border-color: var(--primary); }
+.address-option.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-tint); }
+.address-option input { accent-color: var(--primary); width: 16px; height: 16px; }
 
 .addr-label { font-size: 13px; font-weight: 700; }
 
 .new-address-form { margin-top: 8px; }
+.new-address-form summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 6px 0;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  margin-top: 12px;
+}
 
+.order-summary { position: sticky; top: 88px; }
 .summary-lines { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
 .summary-row { display: flex; justify-content: space-between; font-size: 13px; }
+.ship-free { color: var(--success); font-weight: 700; }
 .bold { font-weight: 700; }
 
 .summary-total {
@@ -36,13 +53,15 @@ h3 { font-size: 14px; font-weight: 800; margin: 0 0 12px; }
   padding-top: 10px;
   display: flex;
   justify-content: space-between;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
-  margin-bottom: 16px;
+  margin: 8px 0 16px;
 }
 
-.full-width { width: 100%; padding: 12px; }
+.full-width { width: 100%; padding: 13px; font-size: 15px; }
+.checkout-note { text-align: center; margin: 12px 0 0; font-size: 12px; }
 
 @media (max-width: 800px) {
   .checkout-grid { grid-template-columns: 1fr; }
+  .stepper { gap: 48px; }
 }

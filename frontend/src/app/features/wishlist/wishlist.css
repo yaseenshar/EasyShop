@@ -1,0 +1,7 @@
+.wishlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 22px;
+}
+
+.empty-state { display: flex; flex-direction: column; align-items: center; }

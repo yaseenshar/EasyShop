@@ -1,25 +1,38 @@
 <div class="page mid">
-  <h1 class="title">Order history</h1>
+  <h1 class="page-title">Order history</h1>
 
   @if (!loading()) {
     @if (rows().length > 0) {
-      <div class="rows">
-        @for (row of rows(); track row.order.id) {
-          <div class="row card" (click)="open(row.order.id)">
-            <div class="row-info">
-              <div class="order-id">{{ row.order.id.slice(0, 8).toUpperCase() }}</div>
-              <div class="muted">
-                {{ row.order.createdAt | date: 'mediumDate' }} &middot; {{ row.order.items.length }} item{{ row.order.items.length === 1 ? '' : 's' }}
-              </div>
-            </div>
-            <span class="pill" [class]="row.pillClass">{{ row.order.status }}</span>
-            <div class="row-total">{{ row.order.totalAmount | currency: row.order.currency }}</div>
-          </div>
-        }
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Date</th>
+              <th>Items</th>
+              <th>Status</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.order.id) {
+              <tr class="order-row" (click)="open(row.order.id)">
+                <td class="mono bold">{{ row.order.id.slice(0, 8).toUpperCase() }}</td>
+                <td class="muted">{{ row.order.createdAt | date: 'mediumDate' }}</td>
+                <td class="muted">{{ row.order.items.length }} item{{ row.order.items.length === 1 ? '' : 's' }}</td>
+                <td><span class="pill" [class]="row.pillClass">{{ row.order.status }}</span></td>
+                <td class="bold">{{ row.order.totalAmount | currency: row.order.currency }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
     } @else {
-      <div class="empty-state">
-        <div>No orders yet.</div>
+      <div class="empty-state card">
+        <div class="empty-icon">📦</div>
+        <div class="empty-msg">No orders yet</div>
+        <p>Your placed orders will show up here.</p>
+        <a routerLink="/shop" class="btn btn-primary btn-pill">Start shopping</a>
       </div>
     }
   }

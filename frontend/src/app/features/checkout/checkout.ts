@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { AddressService } from '../../core/address.service';
@@ -7,10 +7,11 @@ import { CartService } from '../../core/cart.service';
 import { OrderService } from '../../core/order.service';
 import { ToastService } from '../../core/toast.service';
 import { Address } from '../../core/api-types';
+import { Stepper, StepperStep } from '../../shared/stepper';
 
 @Component({
   selector: 'app-checkout',
-  imports: [CurrencyPipe],
+  imports: [CurrencyPipe, Stepper],
   templateUrl: './checkout.html',
   styleUrl: './checkout.css',
 })
@@ -26,6 +27,11 @@ export class Checkout implements OnInit {
   protected readonly selectedAddressId = signal<string | null>(null);
   protected readonly loading = signal(true);
   protected readonly placing = signal(false);
+
+  protected readonly checkoutSteps = computed<StepperStep[]>(() => [
+    { label: 'Shipping & review', state: this.placing() ? 'done' : 'active' },
+    { label: 'Confirmation', state: this.placing() ? 'active' : 'pending' },
+  ]);
 
   // Inline "add address" form, shown when the account has none yet.
   protected readonly newLabel = signal('Home');

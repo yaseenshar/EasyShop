@@ -1,16 +1,36 @@
 @if (order(); as o) {
   <div class="page status">
-    <h1 class="title">Order #{{ o.id.slice(0, 8).toUpperCase() }}</h1>
-    <div class="muted subtitle">Placed {{ o.createdAt | date: 'mediumDate' }} &middot; {{ o.totalAmount | currency: o.currency }}</div>
-
-    <div class="timeline">
-      @for (step of timeline(); track step.label) {
-        <div class="timeline-step">
-          <div class="dot" [class]="'dot-' + step.state"></div>
-          <div class="step-label" [class]="'label-' + step.state">{{ step.label }}</div>
+    @if (displayStatus() === 'CONFIRMED') {
+      <div class="confirm-head">
+        <div class="confirm-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
         </div>
-      }
-    </div>
+        <h1 class="confirm-title">Thank you! Order confirmed.</h1>
+        <p class="muted">We&rsquo;ll email you as your order makes its way to you.</p>
+      </div>
+    } @else if (displayStatus() === 'CANCELLED') {
+      <div class="confirm-head">
+        <div class="confirm-check confirm-check-danger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+        <h1 class="confirm-title">This order was cancelled</h1>
+        <p class="muted">Something went wrong confirming your order — you have not been charged for
+        any unavailable items. Contact support if you have questions.</p>
+      </div>
+    } @else {
+      <h1 class="page-title">Order #{{ o.id.slice(0, 8).toUpperCase() }}</h1>
+      <div class="muted subtitle">Placed {{ o.createdAt | date: 'mediumDate' }} &middot; {{ o.totalAmount | currency: o.currency }}</div>
+    }
+
+    <app-stepper [steps]="stepperSteps()" />
+
+    @if (displayStatus() === 'PROCESSING') {
+      <div class="processing-note muted">Status: {{ o.status.replaceAll('_', ' ') | titlecase }}&hellip;</div>
+    }
 
     @if (stalled()) {
       <p class="muted stall-note">
@@ -19,18 +39,38 @@
       </p>
     }
 
-    <div class="card lines-card">
-      @for (line of lines(); track line.name) {
-        <div class="summary-row">
-          <span>{{ line.name }} &times; {{ line.quantity }}</span>
-          <span class="bold">{{ line.total | currency: o.currency }}</span>
+    <div class="card receipt-card">
+      <div class="receipt-head">
+        <span>Order ID</span>
+        <span class="mono order-id-value">{{ o.id.slice(0, 8).toUpperCase() }}</span>
+      </div>
+      <div class="receipt-lines">
+        @for (line of lines(); track line.name) {
+          <div class="summary-row">
+            <span>{{ line.name }} &times; {{ line.quantity }}</span>
+            <span class="bold">{{ line.total | currency: o.currency }}</span>
+          </div>
+        }
+      </div>
+      <div class="summary-row muted">
+        <span>Shipping</span>
+        <span class="ship-free">Free</span>
+      </div>
+      <div class="summary-row summary-total">
+        <span>Total</span>
+        <span>{{ o.totalAmount | currency: o.currency }}</span>
+      </div>
+      @if (shippingLine(); as line) {
+        <div class="shipping-info">
+          <h4>Shipping to</h4>
+          <p class="muted">{{ line }}</p>
         </div>
       }
     </div>
 
     <div class="actions">
-      <button type="button" class="btn btn-secondary" (click)="goOrders()">View order history</button>
-      <button type="button" class="btn btn-dark" (click)="goHome()">Continue shopping</button>
+      <button type="button" class="btn btn-primary-outline btn-pill" (click)="goOrders()">Track order</button>
+      <button type="button" class="btn btn-primary btn-pill" (click)="goHome()">Continue shopping</button>
     </div>
   </div>
 }

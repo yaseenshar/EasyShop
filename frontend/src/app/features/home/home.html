@@ -1,28 +1,51 @@
-<div class="page">
-  <div class="page-head">
-    <h1>{{ categoryTitle() }}</h1>
-    <span class="count">{{ cards().length }} product{{ cards().length === 1 ? '' : 's' }}</span>
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <h1>Smart commerce.<br /><span class="hero-accent">Seamless experience.</span></h1>
+      <p>Discover a curated catalog of everyday essentials and standout finds, backed by an order
+      pipeline you can actually trust — real-time status, every step of the way.</p>
+      <div class="hero-actions">
+        <button type="button" class="btn btn-accent btn-pill btn-lg" (click)="goShop()">Shop now</button>
+      </div>
+    </div>
   </div>
+</div>
 
-  @if (loading()) {
-    <p class="muted">Loading&hellip;</p>
-  } @else if (cards().length === 0) {
-    <div class="empty-state">
-      <div>No products in this category yet.</div>
+<div class="page">
+  <section class="categories-section">
+    <h2>Shop by category</h2>
+    @if (categories().length > 0) {
+      <div class="category-tiles">
+        @for (cat of categories(); track cat.id) {
+          <button type="button" class="category-tile" (click)="goShop(cat.id)">
+            <span class="category-tile-art">
+              <app-product-art [seed]="cat.id" [name]="cat.name" />
+            </span>
+            <span class="category-tile-name">{{ cat.name }}</span>
+          </button>
+        }
+      </div>
+    }
+  </section>
+
+  <section class="trending-section">
+    <div class="page-head">
+      <h2>Trending now</h2>
+      <a routerLink="/shop" class="see-all">See all &rarr;</a>
     </div>
-  } @else {
-    <div class="grid">
-      @for (card of cards(); track card.product.id) {
-        <div class="card product-card" (click)="openProduct(card.product.id)">
-          <div class="thumb">{{ card.product.sku }}<br />photo</div>
-          <div class="name">{{ card.product.name }}</div>
-          <div class="muted">{{ card.ratingLabel }}</div>
-          <div class="card-footer">
-            <div class="price">{{ card.product.price | currency: card.product.currency }}</div>
-            <button type="button" class="btn btn-primary btn-sm" (click)="addToCart(card, $event)">Add</button>
-          </div>
-        </div>
-      }
-    </div>
-  }
+
+    @if (loading()) {
+      <p class="muted">Loading&hellip;</p>
+    } @else if (trending().length === 0) {
+      <div class="empty-state">
+        <div class="empty-msg">No products yet.</div>
+      </div>
+    } @else {
+      <div class="trending-grid">
+        @for (card of trending(); track card.product.id) {
+          <app-product-card [product]="card.product" [ratingLabel]="card.ratingLabel" (add)="addToCart($event)" />
+        }
+      </div>
+    }
+  </section>
 </div>

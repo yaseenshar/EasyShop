@@ -1,0 +1,105 @@
+.shop-layout {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.shop-filters {
+  width: 220px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 88px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.filter-group h3 {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0 0 14px;
+}
+
+.filter-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.filter-option { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; color: var(--ink-soft); }
+.filter-option input { accent-color: var(--primary); width: 16px; height: 16px; }
+.filter-option:hover { color: var(--ink); }
+
+.price-slider { width: 100%; accent-color: var(--primary); }
+.price-range-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+.stars-option { color: var(--accent); letter-spacing: 1px; }
+
+.color-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border-input);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.swatch:hover { transform: scale(1.1); }
+.swatch-active { box-shadow: 0 0 0 2px var(--primary); }
+
+.clear-filters {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+.clear-filters:hover { text-decoration: underline; }
+
+.shop-results { flex: 1; min-width: 0; }
+
+.shop-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sort-select {
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-btn);
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 22px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 32px;
+}
+
+@media (max-width: 860px) {
+  .shop-layout { flex-direction: column; }
+  .shop-filters {
+    width: 100%;
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-group { flex: 1; min-width: 160px; }
+}

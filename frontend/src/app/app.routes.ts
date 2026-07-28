@@ -7,6 +7,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/home/home').then((m) => m.Home),
   },
   {
+    path: 'shop',
+    loadComponent: () => import('./features/shop/shop').then((m) => m.Shop),
+  },
+  {
+    path: 'wishlist',
+    loadComponent: () => import('./features/wishlist/wishlist').then((m) => m.Wishlist),
+  },
+  {
     path: 'products/:id',
     loadComponent: () =>
       import('./features/product-detail/product-detail').then((m) => m.ProductDetail),
@@ -39,16 +47,28 @@ export const routes: Routes = [
     canActivate: [roleGuard('CUSTOMER', 'VENDOR', 'ADMIN')],
   },
   {
-    path: 'admin/reviews',
-    loadComponent: () =>
-      import('./features/admin-reviews/admin-reviews').then((m) => m.AdminReviews),
-    canActivate: [roleGuard('ADMIN')],
-  },
-  {
-    path: 'admin/products',
-    loadComponent: () =>
-      import('./features/admin-products/admin-products').then((m) => m.AdminProducts),
+    path: 'admin',
+    loadComponent: () => import('./shared/admin-shell').then((m) => m.AdminShell),
     canActivate: [roleGuard('ADMIN', 'VENDOR')],
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./features/admin-dashboard/admin-dashboard').then((m) => m.AdminDashboard),
+      },
+      {
+        path: 'inventory',
+        loadComponent: () =>
+          import('./features/admin-products/admin-products').then((m) => m.AdminProducts),
+        canActivate: [roleGuard('ADMIN', 'VENDOR')],
+      },
+      {
+        path: 'reviews',
+        loadComponent: () =>
+          import('./features/admin-reviews/admin-reviews').then((m) => m.AdminReviews),
+        canActivate: [roleGuard('ADMIN')],
+      },
+    ],
   },
   {
     path: 'forbidden',

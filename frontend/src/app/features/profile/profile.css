@@ -1,31 +1,114 @@
-.title { font-size: 24px; font-weight: 800; margin: 0 0 24px; }
+.profile-shell { display: flex; min-height: 100vh; }
 
-.profile-card { padding: 24px; }
-
-.profile-head {
+.profile-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--chrome-bg-2);
+  color: var(--chrome-muted);
+  border-right: 1px solid var(--chrome-border);
   display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
+  flex-direction: column;
+  padding: 22px 18px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
 }
 
-.avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  font-size: 20px;
+.profile-brand { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.profile-brand-logo { height: 28px; width: 28px; object-fit: contain; }
+.profile-brand-word { color: var(--chrome-ink); font-weight: 800; font-size: 16px; }
+
+.profile-portal-label {
+  font-size: 11px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-2);
+  margin-bottom: 28px;
+}
+
+.profile-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.profile-nav-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 11px 14px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--chrome-muted);
+  cursor: pointer;
+}
+.profile-nav-link:hover { background: color-mix(in oklch, white 8%, transparent); color: var(--chrome-ink); }
+.profile-nav-link.active {
+  background: color-mix(in oklch, var(--primary) 22%, transparent);
+  color: color-mix(in oklch, var(--primary) 40%, white);
+}
+
+.profile-exit {
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--chrome-muted);
+  cursor: pointer;
+  padding-top: 16px;
+  border-top: 1px solid var(--chrome-border);
+}
+.profile-exit:hover { color: var(--danger); }
+
+.profile-main { flex: 1; min-width: 0; background: var(--bg); display: flex; flex-direction: column; }
+
+.info-card { margin-bottom: 32px; }
+.info-card h3 { font-size: 14px; font-weight: 800; margin: 0 0 16px; }
+.info-card-body { display: flex; gap: 20px; align-items: center; }
+.avatar-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--faint);
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
+.avatar-icon svg { width: 34px; height: 34px; }
+.info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; font-size: 14px; flex: 1; }
 
-.name { font-size: 16px; font-weight: 800; margin-bottom: 4px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.section-header h3 { font-size: 15px; font-weight: 800; margin: 0; }
+.see-all { font-size: 13px; font-weight: 700; }
 
+.address-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+.address-card { display: flex; flex-direction: column; gap: 6px; }
+.addr-label { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+
+.new-address-card { max-width: 480px; }
+.new-address-card h3 { font-size: 14px; font-weight: 800; margin: 0 0 14px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin-bottom: 8px; }
+
+.settings-card { max-width: 480px; padding: 24px; }
 .view-info { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
 .edit-btn { align-self: flex-start; margin-top: 8px; }
-
 .edit-form { display: flex; flex-direction: column; gap: 12px; }
 .edit-actions { display: flex; gap: 10px; margin-top: 8px; }
+
+@media (max-width: 760px) {
+  .profile-shell { flex-direction: column; }
+  .profile-sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 16px; }
+  .profile-portal-label { display: none; }
+  .profile-nav { flex-direction: row; flex: none; }
+  .profile-exit { border-top: none; padding-top: 0; margin-left: auto; }
+  .info-card-body { flex-direction: column; align-items: flex-start; }
+  .info-grid { grid-template-columns: 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+}

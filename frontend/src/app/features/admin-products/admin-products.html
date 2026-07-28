@@ -1,7 +1,7 @@
 <div class="page admin">
   <div class="page-head">
-    <h1>Products</h1>
-    <button type="button" class="btn btn-dark" (click)="openAddForm()">+ Add product</button>
+    <h1>Inventory management</h1>
+    <button type="button" class="btn btn-primary btn-pill" (click)="openAddForm()">+ Add new product</button>
   </div>
 
   @if (formOpen()) {
@@ -46,10 +46,27 @@
   }
 
   @if (!loading()) {
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          type="search"
+          class="search-input"
+          placeholder="Search by name or SKU&hellip;"
+          [value]="search()"
+          (input)="updateSearch($any($event.target).value)"
+        />
+      </div>
+      <span class="muted">{{ filteredRows().length }} of {{ rows().length }} products</span>
+    </div>
+
     <div class="data-table-wrap">
       <table class="data-table">
         <thead>
           <tr>
+            <th></th>
             <th>SKU</th>
             <th>Name</th>
             <th>Category</th>
@@ -59,8 +76,13 @@
           </tr>
         </thead>
         <tbody>
-          @for (row of rows(); track row.product.id) {
+          @for (row of pagedRows(); track row.product.id) {
             <tr>
+              <td>
+                <div class="art-tile art-tile-sm">
+                  <app-product-art [seed]="row.product.sku" [name]="row.product.name" />
+                </div>
+              </td>
               <td class="mono">{{ row.product.sku }}</td>
               <td class="bold">{{ row.product.name }}</td>
               <td>{{ row.categoryName }}</td>
@@ -71,15 +93,51 @@
                 </span>
               </td>
               <td class="actions-cell">
-                <button type="button" class="btn btn-secondary btn-sm" (click)="openEditForm(row)">Edit</button>
+                <button type="button" class="icon-action" title="Edit" aria-label="Edit" (click)="openEditForm(row)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                </button>
                 @if (row.product.active) {
-                  <button type="button" class="btn btn-secondary btn-sm" (click)="deactivate(row)">Deactivate</button>
+                  <button
+                    type="button"
+                    class="icon-action icon-action-danger"
+                    title="Deactivate"
+                    aria-label="Deactivate"
+                    (click)="deactivate(row)"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M4 7h16M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"
+                      />
+                    </svg>
+                  </button>
                 }
               </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="7" class="empty-cell muted">No products match this search.</td>
             </tr>
           }
         </tbody>
       </table>
     </div>
+
+    @if (totalPages() > 1) {
+      <div class="pagination">
+        <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() === 0" (click)="goPage(-1)">&larr; Prev</button>
+        <span class="muted">Page {{ page() + 1 }} of {{ totalPages() }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() >= totalPages() - 1" (click)="goPage(1)">
+          Next &rarr;
+        </button>
+      </div>
+    }
   }
 </div>

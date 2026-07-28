@@ -1,76 +1,160 @@
 /* You can add global styles to this file, and also import other style files */
 /* ============================================================================
- * EasyShop design tokens — extracted VERBATIM from app.html.
- * The design file is the source of truth; these custom properties transcribe
- * it, they do not reinterpret it. Every value below appears literally in the
- * design's inline styles.
+ * EasyShop design tokens — 2026 brand revamp (blue-600 primary / emerald-500
+ * accent, slate neutrals), retuned from the mockups + easyshop_master_prototype
+ * in NewDesign/. Token *names* are unchanged from the previous system so every
+ * existing component keeps working; only values (and the new dark-mode block)
+ * change. Toggle dark mode by adding/removing `.dark` on <html> (ThemeService).
  * ========================================================================== */
 
 :root {
-  /* ---- Ink (all neutrals share hue 90, chroma ~0.01 — warm gray family) --- */
-  --ink:        oklch(22% 0.01 90);   /* primary text, dark buttons, toast bg */
-  --ink-soft:   oklch(35% 0.01 90);   /* body copy, inactive nav              */
-  --muted:      oklch(48% 0.01 90);   /* secondary text, labels, meta         */
-  --faint:      oklch(65% 0.01 90);   /* placeholders                         */
+  color-scheme: light;
+
+  /* ---- Ink (dark navy family, hue ~260 — mockup's "premium dark navy text",
+     noticeably bluer than a neutral gray) --------------------------------- */
+  --ink:        oklch(24% 0.055 260);  /* primary text, dark buttons, toast bg */
+  --ink-soft:   oklch(36% 0.045 260);  /* body copy, inactive nav              */
+  --muted:      oklch(50% 0.035 260);  /* secondary text, labels, meta         */
+  --faint:      oklch(66% 0.02 260);   /* placeholders                         */
 
   /* ---- Surfaces & borders ------------------------------------------------ */
-  --bg:         oklch(98% 0.005 90);  /* page background                      */
-  --surface:    #ffffff;              /* cards, header, inputs                */
-  --surface-2:  oklch(96% 0.003 90);  /* table header row                     */
-  --border:     oklch(90% 0.005 90);  /* card & divider borders               */
-  --border-input: oklch(88% 0.005 90);/* input & secondary-button borders     */
-  --img-a:      oklch(94% 0.005 90);  /* image-placeholder stripe A           */
-  --img-b:      oklch(97% 0.003 90);  /* image-placeholder stripe B           */
+  --bg:         oklch(98% 0.004 260);  /* page background                      */
+  --surface:    #ffffff;               /* cards, header, inputs                */
+  --surface-2:  oklch(96% 0.006 260);  /* table header row                     */
+  --border:     oklch(90% 0.008 260);  /* card & divider borders               */
+  --border-input: oklch(87% 0.008 260);/* input & secondary-button borders     */
+  --img-a:      oklch(93% 0.02 260);   /* placeholder-art gradient stop A      */
+  --img-b:      oklch(97% 0.01 260);   /* placeholder-art gradient stop B      */
 
   /* ---- Brand / semantic -------------------------------------------------- */
-  --primary:        oklch(52% 0.15 265);  /* indigo — CTAs, links, avatar, badge dot */
-  --primary-hover:  oklch(46% 0.15 265);  /* link hover                              */
-  --primary-tint:   oklch(94% 0.03 265);  /* active nav-category pill bg             */
+  --primary:        oklch(53% 0.23 260);  /* electric blue-600 — CTAs, links, avatar, badge dot */
+  --primary-hover:  oklch(46% 0.22 260);  /* blue-700 — hover/active                    */
+  --primary-tint:   oklch(94% 0.035 260); /* active nav-category pill bg                */
 
-  --success:        oklch(52% 0.14 145);  /* approve, CONFIRMED, timeline done dots  */
-  --success-tint:   oklch(94% 0.03 145);  /* Verified-purchase & Active pills        */
+  --accent-2:        oklch(70% 0.16 165); /* emerald-500 — secondary CTA, "Free" shipping, sale badges */
+  --accent-2-hover:  oklch(63% 0.16 165); /* emerald-600 — hover                         */
+  --accent-2-tint:   oklch(94% 0.04 165);
 
-  --danger:         oklch(55% 0.15 25);   /* remove, reject, sign out, CANCELLED     */
-  --danger-tint:    oklch(95% 0.03 25);   /* CANCELLED pill bg                       */
+  --success:        oklch(58% 0.15 160);  /* approve, CONFIRMED, timeline done dots  */
+  --success-tint:   oklch(94% 0.04 160);  /* Verified-purchase & Active pills        */
 
-  --accent:         oklch(55% 0.14 85);   /* stars, PROCESSING status, loyalty tier  */
-  --accent-tint:    oklch(96% 0.03 85);   /* loyalty/PROCESSING pill bg              */
+  --danger:         oklch(56% 0.19 22);   /* remove, reject, sign out, CANCELLED     */
+  --danger-tint:    oklch(95% 0.04 22);   /* CANCELLED pill bg                       */
 
-  --timeline-idle:  oklch(88% 0.005 90);  /* future timeline dots                    */
-  --timeline-idle-text: oklch(60% 0.01 90);
+  --accent:         oklch(75% 0.15 85);   /* amber — stars, PROCESSING status, loyalty tier */
+  --accent-tint:    oklch(96% 0.04 85);   /* loyalty/PROCESSING pill bg              */
+
+  --timeline-idle:  oklch(88% 0.008 260); /* future timeline dots                    */
+  --timeline-idle-text: oklch(60% 0.01 260);
 
   /* ---- Typography -------------------------------------------------------- */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'SF Mono', Consolas, monospace;   /* SKUs and only SKUs */
-  /* Scale observed: 11 (pills/table headers, uppercase +0.4px tracking),
-     12–13 (meta/labels/buttons), 14–15 (body/controls), 16 (card price),
-     18 (h3 section), 20 (logo), 22–26 (page h1), 28 (product h1).
+  /* Scale: 11 (pills/table headers, uppercase +0.4px tracking), 12–13
+     (meta/labels/buttons), 14–15 (body/controls), 16 (card price), 18 (h3
+     section), 20 (logo), 22–26 (page h1), 28 (product h1), 34–44 (hero).
      Weights: 600 (nav), 700 (labels/UI bold), 800 (headings, prices, logo). */
 
   /* ---- Shape & elevation ------------------------------------------------- */
-  --radius-btn:   6px;
-  --radius-card:  10px;
-  --radius-img:   8px;    /* 12px on product-detail hero */
+  --radius-btn:   8px;
+  --radius-card:  16px;
+  --radius-img:   12px;   /* 20px on product-detail hero */
   --radius-pill:  10px;
-  --shadow-menu:  0 8px 24px rgba(0, 0, 0, 0.08);
-  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.2);
+  --radius-full:  999px;  /* pill CTAs, avatar, badges */
+  --shadow-menu:  0 8px 24px rgba(15, 23, 42, 0.10);
+  --shadow-toast: 0 8px 24px rgba(15, 23, 42, 0.22);
+  --shadow-card:  0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 28px -12px rgba(15, 23, 42, 0.12);
+  --shadow-glow-primary: 0 8px 20px -6px oklch(52% 0.20 259 / 0.45);
+  --shadow-glow-accent-2: 0 8px 20px -6px oklch(70% 0.16 165 / 0.45);
+
+  /* ---- Surfaces used for glass chrome (nav / hero cards) ------------------ */
+  --glass-bg: oklch(100% 0 0 / 0.78);
+  --glass-border: oklch(90% 0.008 260 / 0.6);
+
+  /* ---- "Chrome" — permanently-dark surfaces (footer, hero, admin sidebar),
+     same in both themes, matching the mockup's always-navy footer/hero. ---- */
+  --chrome-bg:     oklch(21% 0.03 260);
+  --chrome-bg-2:   oklch(15% 0.02 260);
+  --chrome-ink:    oklch(96% 0.01 260);
+  --chrome-muted:  oklch(68% 0.02 260);
+  --chrome-border: oklch(30% 0.03 260);
 
   /* ---- Layout (per-screen max-widths, from the design) ------------------- */
   --w-shell:     1240px;  /* header + catalog grid       */
   --w-product:   1100px;  /* product detail              */
-  --w-admin:     1000px;  /* admin products table        */
+  --w-admin:     1100px;  /* admin products table        */
   --w-mid:        900px;  /* cart, checkout, orders, moderation */
   --w-status:     700px;  /* order status                */
-  --w-narrow:     600px;  /* profile                     */
+  --w-narrow:     600px;  /* profile (legacy narrow pages) */
   /* Catalog grid: repeat(auto-fill, minmax(230px, 1fr)), gap 22px.           */
 }
 
+/* ============================================================================
+ * Dark mode — same tokens, re-themed. Adding `.dark` to <html> (ThemeService,
+ * frontend/src/app/core/theme.service.ts) is enough: every atom below already
+ * reads these variables, so the whole app re-themes without per-component work.
+ * ========================================================================== */
+:root.dark {
+  color-scheme: dark;
+
+  --ink:        oklch(95% 0.01 260);
+  --ink-soft:   oklch(85% 0.012 260);
+  --muted:      oklch(68% 0.014 260);
+  --faint:      oklch(50% 0.014 260);
+
+  --bg:         oklch(19% 0.014 260);
+  --surface:    oklch(24% 0.016 260);
+  --surface-2:  oklch(28% 0.016 260);
+  --border:     oklch(32% 0.018 260);
+  --border-input: oklch(36% 0.018 260);
+  --img-a:      oklch(30% 0.03 260);
+  --img-b:      oklch(26% 0.02 260);
+
+  --primary:        oklch(68% 0.17 259);
+  --primary-hover:  oklch(74% 0.15 259);
+  --primary-tint:   oklch(28% 0.06 259);
+
+  --accent-2:        oklch(74% 0.15 165);
+  --accent-2-hover:  oklch(80% 0.13 165);
+  --accent-2-tint:   oklch(28% 0.05 165);
+
+  --success:        oklch(70% 0.14 160);
+  --success-tint:   oklch(28% 0.05 160);
+
+  --danger:         oklch(70% 0.16 22);
+  --danger-tint:    oklch(30% 0.06 22);
+
+  --accent:         oklch(78% 0.13 85);
+  --accent-tint:    oklch(30% 0.05 85);
+
+  --timeline-idle:  oklch(34% 0.014 260);
+  --timeline-idle-text: oklch(55% 0.014 260);
+
+  --shadow-menu:  0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -12px rgba(0, 0, 0, 0.5);
+
+  --glass-bg: oklch(24% 0.016 260 / 0.72);
+  --glass-border: oklch(40% 0.02 260 / 0.6);
+}
+
 /* Global rules present in the design's <helmet> block */
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-sans); }
+* , *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-sans); transition: background-color 0.2s ease, color 0.2s ease; }
 a { color: var(--primary); text-decoration: none; }
 a:hover { color: var(--primary-hover); }
 ::placeholder { color: var(--faint); }
 input, select, textarea, button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-input); border-radius: var(--radius-full); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
 
 /* ============================================================================
  * Shared atoms — the same handful of patterns repeat on every screen in the
@@ -91,33 +175,77 @@ input, select, textarea, button { font-family: inherit; }
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 20px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.page-head h1 { font-size: 26px; font-weight: 800; margin: 0; }
+.page-head h1,
+.page-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0 0 24px;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.page-head h1 { margin: 0; }
 .page-head .count { font-size: 13px; color: var(--muted); }
 
 .muted { color: var(--muted); font-size: 13px; }
+.mono { font-family: var(--font-mono); }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: none;
   border-radius: var(--radius-btn);
   font-weight: 700;
   cursor: pointer;
   font-size: 14px;
   padding: 10px 18px;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-dark { background: var(--ink); color: #fff; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: var(--shadow-glow-primary); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-accent { background: var(--accent-2); color: #fff; box-shadow: var(--shadow-glow-accent-2); }
+.btn-accent:hover:not(:disabled) { background: var(--accent-2-hover); }
+.btn-dark { background: var(--ink); color: var(--bg); }
 .btn-secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--border-input); }
+.btn-secondary:hover:not(:disabled) { background: var(--surface-2); }
+.btn-primary-outline { background: var(--surface); color: var(--primary); border: 1px solid var(--primary); }
+.btn-primary-outline:hover:not(:disabled) { background: var(--primary-tint); }
 .btn-danger-outline { background: var(--surface); color: var(--danger); border: 1px solid var(--danger); }
 .btn-success { background: var(--success); color: #fff; }
 .btn-sm { font-size: 12px; padding: 8px 14px; }
+.btn-lg { font-size: 16px; padding: 14px 28px; }
+.btn-pill { border-radius: var(--radius-full); }
+.btn-icon { padding: 10px; border-radius: var(--radius-full); }
+.btn-full { width: 100%; }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  padding: 14px;
+  padding: 16px;
+}
+
+.glass-nav {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
@@ -129,8 +257,18 @@ input, select, textarea, button { font-family: inherit; }
   width: 100%;
   border: 1px solid var(--border-input);
   border-radius: var(--radius-btn);
-  padding: 9px 10px;
-  font-size: 13px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-tint);
 }
 .field textarea { resize: vertical; }
 
@@ -140,14 +278,21 @@ input, select, textarea, button { font-family: inherit; }
   padding: 3px 9px;
   border-radius: var(--radius-pill);
   display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 .pill-success { color: var(--success); background: var(--success-tint); }
 .pill-danger { color: var(--danger); background: var(--danger-tint); }
 .pill-accent { color: var(--accent); background: var(--accent-tint); }
+.pill-brand { color: var(--primary); background: var(--primary-tint); }
 .pill-neutral { color: var(--muted); background: var(--surface-2); }
 
-.empty-state { text-align: center; padding: 60px 0; color: var(--muted); }
-.empty-state div { font-size: 15px; margin-bottom: 16px; }
+.stars { color: var(--accent); letter-spacing: 1px; }
+
+.empty-state { text-align: center; padding: 60px 24px; color: var(--muted); }
+.empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
+.empty-state div.empty-msg { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+.empty-state p { font-size: 14px; margin: 0 0 20px; }
 
 table.data-table { width: 100%; border-collapse: collapse; }
 .data-table thead th {
@@ -157,7 +302,7 @@ table.data-table { width: 100%; border-collapse: collapse; }
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   text-align: left;
 }
 .data-table tbody td {
@@ -165,9 +310,22 @@ table.data-table { width: 100%; border-collapse: collapse; }
   padding: 12px 16px;
   font-size: 13px;
   border-top: 1px solid var(--border);
+  vertical-align: middle;
 }
 .data-table-wrap {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   overflow: hidden;
 }
+
+/* Wrapper for <app-product-art> — sizes/rounds the tile, the component fills it. */
+.art-tile {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-img);
+  overflow: hidden;
+  background: var(--img-a);
+  flex-shrink: 0;
+}
+.art-tile.art-tile-sm { width: 64px; height: 64px; aspect-ratio: auto; }
+.art-tile.art-tile-md { width: 96px; height: 96px; aspect-ratio: auto; }
