@@ -41,7 +41,7 @@
         <!-- Centralized dependency versions -->
         <resilience4j.version>2.2.0</resilience4j.version>
         <mapstruct.version>1.6.3</mapstruct.version>
-        <testcontainers.version>1.20.4</testcontainers.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <!-- dependencyManagement = declare versions here, consume in children without versions -->
