@@ -1,10 +1,12 @@
 package com.easyshop.payment.saga;
 
+import java.time.Instant;
 import java.util.UUID;
 
+import com.easyshop.common.event.PaymentEvents.PaymentCompletedEvent;
+import com.easyshop.common.event.PaymentEvents.PaymentFailedEvent;
 import com.easyshop.common.saga.SagaIdempotencyKeys;
 import com.easyshop.common.saga.SagaMessages.ChargePaymentCommand;
-import com.easyshop.common.saga.SagaMessages.PaymentReply;
 import com.easyshop.payment.entity.PaymentTransaction;
 import com.easyshop.payment.gateway.PaymentGateway;
 import com.easyshop.payment.gateway.PaymentGateway.GatewayResult;
@@ -51,7 +53,7 @@ public class PaymentChargeAndRefundTxn {
     }
 
     @Transactional
-    public PaymentReply charge(ChargePaymentCommand command, String commandId) {
+    public Object charge(ChargePaymentCommand command, String commandId) {
         // commandId, not command.idempotencyKey() - the field name on the
         // entity/DB column is unchanged (idempotency_key), but the VALUE it
         // now stores is the payment-command-level key, not the order's
@@ -63,14 +65,16 @@ public class PaymentChargeAndRefundTxn {
         GatewayResult result = gateway.charge(
                 command.orderId(), command.amount(), command.currency(), SagaIdempotencyKeys.pspKey(commandId));
 
+        Object reply;
         if (result.success()) {
             tx.markSucceeded(result.gatewayReference());
+            reply = new PaymentCompletedEvent(command.orderId(), tx.getId(), Instant.now());
+            writeToOutbox(tx.getOrderId(), "PaymentCompletedEvent", "payment.charge.reply", reply);
         } else {
             tx.markFailed(result.failureReason());
+            reply = new PaymentFailedEvent(command.orderId(), result.failureReason(), Instant.now());
+            writeToOutbox(tx.getOrderId(), "PaymentFailedEvent", "payment.charge.reply", reply);
         }
-
-        var reply = new PaymentReply(command.orderId(), result.success(), tx.getId(), result.failureReason());
-        writeToOutbox(tx.getOrderId(), "PaymentReply", "payment.charge.reply", reply);
 
         log.info("Payment {} for order {}: {}", result.success() ? "succeeded" : "failed",
                 command.orderId(), tx.getId());

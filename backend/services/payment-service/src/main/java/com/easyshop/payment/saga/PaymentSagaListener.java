@@ -21,7 +21,8 @@ import org.springframework.stereotype.Component;
  * javadoc for why the actual charge work has to live in a different bean.
  *
  * Consumes ChargePaymentCommand (published by order-service's saga
- * orchestrator) and produces PaymentReply via the local outbox.
+ * orchestrator) and produces PaymentCompletedEvent or PaymentFailedEvent
+ * via the local outbox.
  *
  * THREE-LAYER DEFENSE for the one irreversible operation in the system:
  *   1. Redis IdempotencyStore lock/result — fast dedupe of Kafka redelivery
@@ -80,8 +81,8 @@ public class PaymentSagaListener {
         }
 
         if (begin instanceof IdempotencyStore.Begin.Completed) {
-            // The outbox already emitted PaymentReply exactly once for this
-            // commandId (§4.7) - the saga already advanced. Redelivery is a
+            // The outbox already emitted a PaymentCompletedEvent/PaymentFailedEvent
+            // exactly once for this commandId (§4.7) - the saga already advanced. Redelivery is a
             // pure no-op: no re-charge, no re-publish.
             log.info("Charge command {} already completed - redelivery is a no-op", commandId);
             return true;

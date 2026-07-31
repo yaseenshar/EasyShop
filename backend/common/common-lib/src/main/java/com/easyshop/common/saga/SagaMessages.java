@@ -87,13 +87,6 @@ public final class SagaMessages {
             String failureReason
     ) {}
 
-    public record PaymentReply(
-            UUID orderId,
-            boolean success,
-            UUID transactionId,
-            String failureReason
-    ) {}
-
     public record StockConfirmationReply(
             UUID orderId,
             boolean success,

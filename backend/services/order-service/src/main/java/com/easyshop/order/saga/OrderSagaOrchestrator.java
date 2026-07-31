@@ -2,6 +2,8 @@ package com.easyshop.order.saga;
 
 import com.easyshop.common.event.OrderCreatedEvent;
 import com.easyshop.common.event.OrderEvents;
+import com.easyshop.common.event.PaymentEvents.PaymentCompletedEvent;
+import com.easyshop.common.event.PaymentEvents.PaymentFailedEvent;
 import com.easyshop.common.saga.SagaMessages;
 import com.easyshop.order.dto.OrderDtos.CreateOrderRequest;
 import com.easyshop.order.entity.Order;
@@ -11,6 +13,8 @@ import com.easyshop.order.outbox.OutboxEvent;
 import com.easyshop.order.repository.OrderRepository;
 import com.easyshop.order.repository.OrderSagaRepository;
 import com.easyshop.order.repository.OutboxRepository;
+import com.fasterxml.jackson.core.JacksonException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -186,32 +190,60 @@ public class OrderSagaOrchestrator {
      * Step 3 reply handler: payment-service tells us whether the charge
      * succeeded. On failure, this is the FIRST point a compensation is
      * needed - we must release the stock we reserved in step 2.
+     *
+     * payment.charge.reply carries TWO different record shapes
+     * (PaymentCompletedEvent and PaymentFailedEvent) - same reason
+     * OrderEventsListener (notification-service) reads order.events as raw
+     * JSON: the listener parameter type can't flex between two shapes, so
+     * we discriminate on structure (PaymentFailedEvent carries
+     * "failureReason", PaymentCompletedEvent carries "transactionId").
      */
     @KafkaListener(topics = SagaTopics.PAYMENT_CHARGE_REPLY, groupId = "order-service-saga")
     @Transactional
-    public void onPaymentReply(SagaMessages.PaymentReply reply,
+    public void onPaymentReply(String payload,
                                org.springframework.kafka.support.Acknowledgment ack) {
         try {
-            handlePaymentReply(reply);
+            handlePaymentReply(payload);
         } finally {
             ack.acknowledge();
         }
     }
 
-    private void handlePaymentReply(SagaMessages.PaymentReply reply) {
-        OrderSagaState saga = sagaRepository.findById(reply.orderId())
-                .orElseThrow(() -> new IllegalStateException("Unknown saga: " + reply.orderId()));
-        Order order = orderRepository.findById(reply.orderId())
-                .orElseThrow(() -> new IllegalStateException("Unknown order: " + reply.orderId()));
+    private void handlePaymentReply(String payload) {
+        UUID orderId;
+        boolean success;
+        UUID transactionId = null;
+        String failureReason = null;
+        try {
+            JsonNode node = objectMapper.readTree(payload);
+            if (node.has("failureReason")) {
+                var event = objectMapper.treeToValue(node, PaymentFailedEvent.class);
+                orderId = event.orderId();
+                success = false;
+                failureReason = event.failureReason();
+            } else {
+                var event = objectMapper.treeToValue(node, PaymentCompletedEvent.class);
+                orderId = event.orderId();
+                success = true;
+                transactionId = event.transactionId();
+            }
+        } catch (JacksonException e) {
+            throw new IllegalArgumentException("Unparseable payment reply", e);
+        }
+
+        OrderSagaState saga = sagaRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalStateException("Unknown saga: " + orderId));
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalStateException("Unknown order: " + orderId));
 
         if (saga.getCurrentStep() != OrderStatus.CHARGING_PAYMENT) {
-            log.warn("Ignoring duplicate/late payment reply for order {}", reply.orderId());
+            log.warn("Ignoring duplicate/late payment reply for order {}", orderId);
             return;
         }
 
-        if (!reply.success()) {
+        if (!success) {
             log.info("Payment failed for order {}: {} - compensating stock reservation",
-                    reply.orderId(), reply.failureReason());
+                    orderId, failureReason);
 
             saga.advanceTo(OrderStatus.COMPENSATING);
             order.transitionTo(OrderStatus.COMPENSATING);
@@ -225,11 +257,11 @@ public class OrderSagaOrchestrator {
             saga.recordCompensation("RELEASE_STOCK");
             saga.advanceTo(OrderStatus.CANCELLED);
             order.transitionTo(OrderStatus.CANCELLED);
-            publishOrderCancelled(order, reply.failureReason());
+            publishOrderCancelled(order, failureReason);
             return;
         }
 
-        saga.recordPayment(reply.transactionId());
+        saga.recordPayment(transactionId);
         saga.advanceTo(OrderStatus.CONFIRMING_STOCK);
         order.transitionTo(OrderStatus.CONFIRMING_STOCK);
 
