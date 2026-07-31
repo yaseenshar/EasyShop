@@ -50,8 +50,14 @@ public class OrderEventsListener {
 
             // Structural discrimination: OrderCancelledEvent carries a
             // "reason" field; OrderCompletedEvent carries "totalAmount".
+            // OrderCreatedEvent ALSO carries "totalAmount" (plus "items",
+            // which Completed/Cancelled don't have) - it must be excluded
+            // explicitly here or it gets misread as a completed order.
             if (node.has("reason")) {
                 handleCancelled(objectMapper.treeToValue(node, OrderCancelledEvent.class));
+            } else if (node.has("items")) {
+                // OrderCreatedEvent - not notification-worthy today, drop.
+                log.debug("Ignoring OrderCreatedEvent on order.events (no notification defined for it yet)");
             } else if (node.has("totalAmount")) {
                 handleCompleted(objectMapper.treeToValue(node, OrderCompletedEvent.class));
             } else {
