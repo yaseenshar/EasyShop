@@ -1,5 +1,6 @@
 package com.easyshop.order.saga;
 
+import com.easyshop.common.event.OrderCreatedEvent;
 import com.easyshop.common.event.OrderEvents;
 import com.easyshop.common.saga.SagaMessages;
 import com.easyshop.order.dto.OrderDtos.CreateOrderRequest;
@@ -97,6 +98,8 @@ public class OrderSagaOrchestrator {
     public void startSaga(Order order, OrderSagaState saga) {
         saga.advanceTo(OrderStatus.RESERVING_STOCK);
         order.transitionTo(OrderStatus.RESERVING_STOCK);
+
+        publishOrderCreated(order);
 
         var command = new SagaMessages.ReserveStockCommand(
                 order.getId(),
@@ -321,6 +324,20 @@ public class OrderSagaOrchestrator {
 
         log.info("Refund requested for order {} (transaction {})", order.getId(), saga.getPaymentTransactionId());
         return true;
+    }
+
+    private void publishOrderCreated(Order order) {
+        var items = order.getItems().stream()
+                .map(item -> new OrderCreatedEvent.OrderItem(
+                        item.getProductId(), item.getQuantity(), item.getUnitPrice()))
+                .collect(Collectors.toList());
+
+        var event = new OrderCreatedEvent(
+                UUID.randomUUID(), order.getId(), order.getUserId(), items,
+                order.getTotalAmount(), order.getShippingAddressId(), Instant.now());
+
+        writeToOutbox("Order", order.getId(), "OrderCreatedEvent",
+                SagaTopics.ORDER_EVENTS, event);
     }
 
     private void publishOrderCompleted(Order order) {
