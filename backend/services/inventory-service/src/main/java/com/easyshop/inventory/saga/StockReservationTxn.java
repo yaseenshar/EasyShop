@@ -1,10 +1,15 @@
 package com.easyshop.inventory.saga;
 
+import com.easyshop.common.saga.SagaMessages.StockConfirmationReply;
+import com.easyshop.common.saga.SagaMessages.StockReservationReply;
 import com.easyshop.inventory.entity.ProductStock;
 import com.easyshop.inventory.entity.StockReservation;
+import com.easyshop.inventory.outbox.OutboxEvent;
+import com.easyshop.inventory.outbox.OutboxRepository;
 import com.easyshop.inventory.repository.ProductStockRepository;
 import com.easyshop.inventory.repository.StockReservationRepository;
 import com.easyshop.inventory.saga.StockReservationService.ReservationOutcome;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -44,11 +49,17 @@ public class StockReservationTxn {
 
     private final ProductStockRepository stockRepository;
     private final StockReservationRepository reservationRepository;
+    private final OutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
 
     public StockReservationTxn(ProductStockRepository stockRepository,
-                                StockReservationRepository reservationRepository) {
+                                StockReservationRepository reservationRepository,
+                                OutboxRepository outboxRepository,
+                                ObjectMapper objectMapper) {
         this.stockRepository = stockRepository;
         this.reservationRepository = reservationRepository;
+        this.outboxRepository = outboxRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -92,6 +103,16 @@ public class StockReservationTxn {
     // product can lose the optimistic-lock race here too (observed live).
     // REQUIRES_NEW for the same reason: a retried attempt needs a fresh
     // transaction and a fresh read, not the poisoned one from the failed try.
+    //
+    // The outbox write below is INSIDE this same transaction on purpose -
+    // unlike reserve() (one REQUIRES_NEW transaction PER LINE ITEM, so no
+    // single one of them can be atomic with the one order-level reply),
+    // every row touched here belongs to this order and already commits as
+    // one unit, so folding the reply in closes the exact dual-write gap
+    // PaymentChargeAndRefundTxn already closes for payment-service: without
+    // this, a crash between "stock confirmed" and "reply published" left
+    // the order stuck in CONFIRMING_STOCK forever with the customer already
+    // charged and the stock already (permanently) decremented.
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void confirmOrder(UUID orderId) {
         List<StockReservation> reservations = reservationRepository.findAllByOrderId(orderId);
@@ -106,10 +127,34 @@ public class StockReservationTxn {
 
             log.info("Confirmed reservation(s) {} for order {}", reservation.getId(), orderId);
         }
+
+        writeReply(orderId, new StockConfirmationReply(orderId, true, null),
+                "inventory.stock-confirmation.reply");
     }
 
+    // No outbox write here on purpose - this overload also serves
+    // onReleaseCommand's payment-failure compensation path, which
+    // order-service never listens for a reply on (see SagaTopics'
+    // INVENTORY_RELEASE_COMMAND javadoc). Use
+    // releaseOrderAndReportReservationFailure below when a reply IS needed.
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void releaseOrder(UUID orderId) {
+        releaseReservations(orderId);
+    }
+
+    // Closes the same dual-write gap as confirmOrder(), for
+    // handleReserveCommand's partial-failure cleanup: release whatever this
+    // order already reserved, THEN report the reservation as failed - both
+    // in the one transaction, so a crash can't strand "already released"
+    // and "reply never sent" across two separately-committed steps.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void releaseOrderAndReportReservationFailure(UUID orderId, String failureReason) {
+        releaseReservations(orderId);
+        writeReply(orderId, new StockReservationReply(orderId, false, null, failureReason),
+                "inventory.stock-reservation.reply");
+    }
+
+    private void releaseReservations(UUID orderId) {
         List<StockReservation> reservations = reservationRepository.findAllByOrderId(orderId);
         for (StockReservation reservation : reservations) {
             if (reservation.getStatus() != StockReservation.ReservationStatus.RESERVED) {
@@ -125,5 +170,15 @@ public class StockReservationTxn {
         }
 
         log.info("Released {} reservation(s) for order {}", reservations.size(), orderId);
+    }
+
+    private void writeReply(UUID orderId, Object reply, String topic) {
+        try {
+            String payload = objectMapper.writeValueAsString(reply);
+            outboxRepository.save(OutboxEvent.of("StockReservation", orderId,
+                    reply.getClass().getSimpleName(), topic, payload));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize inventory saga reply", e);
+        }
     }
 }

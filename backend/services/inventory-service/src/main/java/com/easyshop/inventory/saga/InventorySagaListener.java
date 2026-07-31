@@ -63,10 +63,17 @@ public class InventorySagaListener {
                         command.orderId(), item.productId(), outcome.failureReason(), successfulReservationIds.size());
 
                 if (!successfulReservationIds.isEmpty()) {
-                    reservationService.releaseOrder(command.orderId());
+                    // Release + failure reply commit in ONE transaction (see
+                    // StockReservationTxn) - a crash here used to be able to
+                    // strand "already released" and "reply never sent" across
+                    // two separately-committed steps, leaving the saga stuck.
+                    reservationService.releaseOrderAndReportReservationFailure(
+                            command.orderId(), outcome.failureReason());
+                } else {
+                    // Nothing was ever mutated for this order - a single
+                    // write, nothing it needs to be atomic with.
+                    publishReply(command.orderId(), false, null, outcome.failureReason());
                 }
-
-                publishReply(command.orderId(), false, null, outcome.failureReason());
                 return;
             }
 
@@ -80,10 +87,14 @@ public class InventorySagaListener {
     @KafkaListener(topics = "inventory.confirm-stock.command", groupId = "inventory-service")
     public void onConfirmCommand(ConfirmStockCommand command, Acknowledgment ack) {
         try {
+            // Success reply is written atomically inside confirmOrder()
+            // itself (see StockReservationTxn) - nothing left to do here on
+            // the happy path.
             reservationService.confirmOrder(command.orderId());
-            var reply = new StockConfirmationReply(command.orderId(), true, null);
-            writeReply("inventory.stock-confirmation.reply", command.orderId(), reply);
         } catch (Exception e) {
+            // confirmOrder() runs in one REQUIRES_NEW transaction, so a
+            // thrown exception rolled it all back - nothing was mutated,
+            // meaning this write has nothing to be atomic with.
             log.error("Failed to confirm stock for order {}", command.orderId(), e);
             var reply = new StockConfirmationReply(command.orderId(), false, e.getMessage());
             writeReply("inventory.stock-confirmation.reply", command.orderId(), reply);

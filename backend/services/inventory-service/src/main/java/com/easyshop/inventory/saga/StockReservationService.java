@@ -62,4 +62,9 @@ public class StockReservationService {
     public void releaseOrder(UUID orderId) {
         txn.releaseOrder(orderId);
     }
+
+    @Retry(name = "stockReservation")
+    public void releaseOrderAndReportReservationFailure(UUID orderId, String failureReason) {
+        txn.releaseOrderAndReportReservationFailure(orderId, failureReason);
+    }
 }
