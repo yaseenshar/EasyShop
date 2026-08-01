@@ -27,6 +27,23 @@
           </tbody>
         </table>
       </div>
+
+      @if (totalPages() > 1) {
+        <div class="pagination">
+          <button type="button" class="btn btn-secondary btn-sm" [disabled]="page() === 0" (click)="goPage(-1)">
+            &larr; Prev
+          </button>
+          <span class="muted">Page {{ page() + 1 }} of {{ totalPages() }}</span>
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            [disabled]="page() >= totalPages() - 1"
+            (click)="goPage(1)"
+          >
+            Next &rarr;
+          </button>
+        </div>
+      }
     } @else {
       <div class="empty-state card">
         <div class="empty-icon">📦</div>

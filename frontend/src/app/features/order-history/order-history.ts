@@ -10,6 +10,8 @@ interface OrderRow {
   pillClass: string;
 }
 
+const PAGE_SIZE = 10;
+
 @Component({
   selector: 'app-order-history',
   imports: [CurrencyPipe, DatePipe, RouterLink],
@@ -22,12 +24,27 @@ export class OrderHistory implements OnInit {
 
   protected readonly rows = signal<OrderRow[]>([]);
   protected readonly loading = signal(true);
+  protected readonly page = signal(0);
+  protected readonly totalPages = signal(0);
 
   ngOnInit(): void {
-    this.orderService.listMyOrders().subscribe((page) => {
+    this.load();
+  }
+
+  private load(): void {
+    this.loading.set(true);
+    this.orderService.listMyOrders(this.page(), PAGE_SIZE).subscribe((page) => {
       this.rows.set(page.content.map((order) => ({ order, pillClass: pillClassForStatus(order.status) })));
+      this.totalPages.set(page.totalPages);
       this.loading.set(false);
     });
+  }
+
+  goPage(delta: number): void {
+    const next = Math.min(Math.max(0, this.page() + delta), Math.max(0, this.totalPages() - 1));
+    if (next === this.page()) return;
+    this.page.set(next);
+    this.load();
   }
 
   open(orderId: string): void {

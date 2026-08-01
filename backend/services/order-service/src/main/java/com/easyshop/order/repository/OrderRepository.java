@@ -15,7 +15,11 @@ import java.util.UUID;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
     Optional<Order> findByIdempotencyKey(String idempotencyKey);
 
-    Page<Order> findByUserId(UUID userId, Pageable pageable);
+    // OrderByCreatedAtDesc is load-bearing, not decorative: without it,
+    // Postgres returns rows in unspecified order (no ORDER BY = no
+    // guarantee), so "order history" looked shuffled and the order a
+    // customer had just placed could land on any page instead of page 0.
+    Page<Order> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
     @Query("""
             SELECT COUNT(o) > 0 FROM Order o JOIN o.items i
