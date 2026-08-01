@@ -441,6 +441,26 @@ services:
       api-gateway: {condition: service_started}
     networks: [easyshop-network]
 
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports: ["4200:80"]
+    mem_limit: 64m
+    depends_on:
+      api-gateway: { condition: service_started }
+    networks: [easyshop-network]
+    healthcheck:
+      # nginx:alpine ships busybox wget (unlike the JVM app images - see the
+      # "App healthchecks note" above), so a real probe is reliable here.
+      # "localhost" resolves to ::1 first in this image and nginx only
+      # listens on IPv4 (see nginx.conf) - use 127.0.0.1 to avoid a
+      # permanently-refused IPv6 healthcheck against an otherwise-healthy server.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ═══════════════════ ON-DEMAND TOOLS (profiles) ═══════════════════════════
   # Not started by default. Start with:
   #   docker compose --profile tools up -d          (Kafka UI)

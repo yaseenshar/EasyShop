@@ -141,7 +141,7 @@ public class OrderController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         UUID userId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
-        var result = orderRepository.findByUserId(userId, PageRequest.of(page, Math.min(size, 100)))
+        var result = orderRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, Math.min(size, 100)))
                 .map(OrderResponse::from);
         return ResponseEntity.ok(ApiResponse.success(PagedResponse.from(result)));
     }

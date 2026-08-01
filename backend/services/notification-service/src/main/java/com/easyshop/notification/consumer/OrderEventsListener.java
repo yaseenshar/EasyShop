@@ -7,6 +7,7 @@ import com.easyshop.notification.channel.NotificationDispatcher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.log4j.Log4j2;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -29,6 +30,13 @@ import java.util.UUID;
  * already stores, and Spring Kafka's converter resolves the type from it) -
  * flagged as the upgrade path; the structural discrimination below keeps
  * the outbox publisher untouched for now.
+ *
+ * The listener parameter is the raw ConsumerRecord rather than String:
+ * the container factory's JacksonJsonMessageConverter always round-trips
+ * the record value through Jackson into the declared parameter type (no
+ * passthrough for String), so a String-typed parameter throws trying to
+ * deserialize a JSON object into a Java String. ConsumerRecord<String,
+ * String> makes Spring Kafka skip conversion and hand back the raw value.
  */
 @Log4j2
 @Component
@@ -44,7 +52,8 @@ public class OrderEventsListener {
     }
 
     @KafkaListener(topics = "order.events", groupId = "notification-service")
-    public void onOrderEvent(String payload, Acknowledgment ack) {
+    public void onOrderEvent(ConsumerRecord<String, String> record, Acknowledgment ack) {
+        String payload = record.value();
         try {
             JsonNode node = objectMapper.readTree(payload);
 

@@ -16,6 +16,7 @@ import com.easyshop.order.repository.OutboxRepository;
 import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -197,13 +198,21 @@ public class OrderSagaOrchestrator {
      * JSON: the listener parameter type can't flex between two shapes, so
      * we discriminate on structure (PaymentFailedEvent carries
      * "failureReason", PaymentCompletedEvent carries "transactionId").
+     *
+     * The parameter is the raw ConsumerRecord rather than String: the
+     * container factory's JacksonJsonMessageConverter always round-trips
+     * the record value through Jackson into the declared parameter type
+     * (no passthrough for String), so a String-typed parameter blows up
+     * trying to deserialize a JSON object into a Java String. Declaring
+     * ConsumerRecord<String, String> makes Spring Kafka skip conversion
+     * and hand back the raw value untouched.
      */
     @KafkaListener(topics = SagaTopics.PAYMENT_CHARGE_REPLY, groupId = "order-service-saga")
     @Transactional
-    public void onPaymentReply(String payload,
+    public void onPaymentReply(ConsumerRecord<String, String> record,
                                org.springframework.kafka.support.Acknowledgment ack) {
         try {
-            handlePaymentReply(payload);
+            handlePaymentReply(record.value());
         } finally {
             ack.acknowledge();
         }

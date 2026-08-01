@@ -7,6 +7,7 @@ import com.easyshop.notification.channel.NotificationChannel.NotificationType;
 import com.easyshop.notification.channel.NotificationDispatcher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.support.Acknowledgment;
@@ -50,13 +51,17 @@ class OrderEventsListenerTest {
         ack = mock(Acknowledgment.class);
     }
 
+    private static ConsumerRecord<String, String> record(String payload) {
+        return new ConsumerRecord<>("order.events", 0, 0L, null, payload);
+    }
+
     @Test
     void cancelledEvent_dispatchesOrderCancelledAndAcks() throws Exception {
         UUID orderId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         var event = new OrderCancelledEvent(orderId, userId, "payment declined", Instant.now());
 
-        listener.onOrderEvent(objectMapper.writeValueAsString(event), ack);
+        listener.onOrderEvent(record(objectMapper.writeValueAsString(event)), ack);
 
         verify(dispatcher).dispatch(eq(orderId), eq(userId), eq(NotificationType.ORDER_CANCELLED),
                 anyString(), anyString());
@@ -69,7 +74,7 @@ class OrderEventsListenerTest {
         UUID userId = UUID.randomUUID();
         var event = new OrderCompletedEvent(orderId, userId, new BigDecimal("49.99"), Instant.now());
 
-        listener.onOrderEvent(objectMapper.writeValueAsString(event), ack);
+        listener.onOrderEvent(record(objectMapper.writeValueAsString(event)), ack);
 
         verify(dispatcher).dispatch(eq(orderId), eq(userId), eq(NotificationType.ORDER_CONFIRMED),
                 anyString(), anyString());
@@ -88,7 +93,7 @@ class OrderEventsListenerTest {
         var event = new OrderCreatedEvent(UUID.randomUUID(), orderId, userId, items,
                 new BigDecimal("39.98"), UUID.randomUUID(), Instant.now());
 
-        listener.onOrderEvent(objectMapper.writeValueAsString(event), ack);
+        listener.onOrderEvent(record(objectMapper.writeValueAsString(event)), ack);
 
         verifyNoInteractions(dispatcher);
         verify(ack).acknowledge();
@@ -98,7 +103,7 @@ class OrderEventsListenerTest {
     void unknownShape_isDroppedButStillAcked() throws Exception {
         String payload = objectMapper.writeValueAsString(Map.of("unexpectedField", "value"));
 
-        listener.onOrderEvent(payload, ack);
+        listener.onOrderEvent(record(payload), ack);
 
         verifyNoInteractions(dispatcher);
         verify(ack).acknowledge();
@@ -106,7 +111,7 @@ class OrderEventsListenerTest {
 
     @Test
     void malformedJson_throwsAndDoesNotAck() {
-        assertThatThrownBy(() -> listener.onOrderEvent("not-json", ack))
+        assertThatThrownBy(() -> listener.onOrderEvent(record("not-json"), ack))
                 .isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(dispatcher);
