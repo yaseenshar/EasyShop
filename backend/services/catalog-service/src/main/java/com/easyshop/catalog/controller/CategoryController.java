@@ -1,7 +1,7 @@
 package com.easyshop.catalog.controller;
 
 import com.easyshop.catalog.dto.CategoryDtos.CategoryResponse;
-import com.easyshop.catalog.repository.CategoryRepository;
+import com.easyshop.catalog.service.CategoryService;
 import com.easyshop.common.dto.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,17 +19,16 @@ import java.util.List;
 @RequestMapping("/api/v1/categories")
 public class CategoryController {
 
-    private final CategoryRepository categoryRepository;
+    private final CategoryService categoryService;
 
-    public CategoryController(CategoryRepository categoryRepository) {
-        this.categoryRepository = categoryRepository;
+    public CategoryController(CategoryService categoryService) {
+        this.categoryService = categoryService;
     }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<CategoryResponse>>> listCategories() {
-        List<CategoryResponse> categories = categoryRepository.findAll().stream()
-                .map(CategoryResponse::from)
-                .toList();
-        return ResponseEntity.ok(ApiResponse.success(categories));
+        // Unwrapped here on purpose: the cache needs a record at the root (see
+        // CategoryListResponse), the API contract stays a plain JSON array.
+        return ResponseEntity.ok(ApiResponse.success(categoryService.listCategories().categories()));
     }
 }
