@@ -1,10 +1,16 @@
 package com.easyshop.catalog.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.cache.Cache;
+import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
@@ -42,8 +48,9 @@ import java.util.concurrent.ThreadLocalRandom;
  *    readable and debuggable: `redis-cli KEYS 'products::*'` just works.
  *
  * 3. PER-CACHE TTLs, WITH JITTER. Product details cache for ~10 minutes,
- *    category listings for ~2 (listings change more often - new products
- *    appear). The +-20% random jitter on each cache's base TTL prevents a
+ *    per-category product listings for ~2 (listings change more often - new
+ *    products appear), and the category taxonomy itself for ~1 hour (it only
+ *    changes by migration). The +-20% random jitter on each base TTL prevents a
  *    thundering herd: if thousands of entries were cached at the same
  *    moment (e.g. after a deploy cleared the cache), identical TTLs would
  *    expire them at the same moment too, stampeding the DB with
@@ -58,17 +65,100 @@ import java.util.concurrent.ThreadLocalRandom;
  *    deliberately-nonexistent IDs to bypass the cache and hit the DB).
  *    The right defense for that is a Bloom filter in front of the cache -
  *    noted as the escalation path, not built until needed.
+ *
+ * 5. IMMEDIATE WRITES. See the cacheWriter() comment - this is NOT the
+ *    library default and eviction is silently racy without it.
+ *
+ * 6. GRACEFUL DEGRADATION WHEN REDIS IS DOWN. See errorHandler().
  */
 @Configuration
 @EnableCaching
-public class CacheConfig {
+public class CacheConfig implements CachingConfigurer {
+
+    private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
 
     public static final String PRODUCTS_CACHE = "products";
     public static final String PRODUCT_LISTINGS_CACHE = "product-listings";
+    public static final String CATEGORIES_CACHE = "categories";
+
+    /**
+     * immediateWrites() is the important part, and it is NOT the default.
+     *
+     * Spring Data Redis 4.x performs cache writes (put / evict / clear)
+     * ASYNCHRONOUSLY and fire-and-forget whenever the connection factory is
+     * reactive-capable - which Lettuce, our driver, is. Verified empirically
+     * against a real Redis: after @CacheEvict returned, the key was still
+     * present, and only disappeared some milliseconds later.
+     *
+     * For a cache-aside WRITE path that is a correctness bug, not a tuning
+     * knob: updateProduct() would return 200 to the caller while the stale
+     * entry was still live in Redis, so an immediate re-read could still see
+     * the old price. The window is small and load-dependent, which is exactly
+     * what makes it a miserable bug to chase in production.
+     *
+     * The cost is that cache writes now block on the Redis round trip. For
+     * the payloads here (a single product DTO) that is a sub-millisecond SET,
+     * and it buys read-your-own-write on the admin path.
+     *
+     * collectStatistics() is what makes hit/miss counts real: without it the
+     * cache_gets{result="hit"} Micrometer meters that
+     * /actuator/prometheus exposes are permanently zero, and there is no way
+     * to tell a working cache from a cache that never hits.
+     */
+    @Bean
+    public RedisCacheWriter cacheWriter(RedisConnectionFactory connectionFactory) {
+        return RedisCacheWriter.create(connectionFactory, config -> config
+                .immediateWrites()
+                .collectStatistics());
+    }
+
+    /**
+     * Without this, Redis being unreachable takes the whole catalog down: every
+     * @Cacheable read throws RedisConnectionFailureException straight out of
+     * the service and the product API returns 500s. That inverts the point of
+     * a cache-aside layer, which is supposed to be a performance optimisation
+     * the system can survive losing.
+     *
+     * On a GET error Spring falls back to invoking the underlying method
+     * (read-through), including on the sync=true path - so the service simply
+     * degrades to serving from MySQL, slower but correct.
+     *
+     * The deliberate tradeoff on the EVICT/CLEAR side: swallowing those means a
+     * failed eviction leaves a stale entry behind. That is acceptable only
+     * because every entry here carries a bounded TTL, so staleness self-heals;
+     * it is logged at ERROR precisely because it is the one case that serves
+     * wrong data.
+     */
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new CacheErrorHandler() {
+            @Override
+            public void handleCacheGetError(RuntimeException exception, Cache cache, Object key) {
+                log.warn("Cache GET failed for {}::{} - falling back to the database", cache.getName(), key,
+                        exception);
+            }
+
+            @Override
+            public void handleCachePutError(RuntimeException exception, Cache cache, Object key, Object value) {
+                log.warn("Cache PUT failed for {}::{} - entry not cached", cache.getName(), key, exception);
+            }
+
+            @Override
+            public void handleCacheEvictError(RuntimeException exception, Cache cache, Object key) {
+                log.error("Cache EVICT failed for {}::{} - a STALE entry may be served until its TTL expires",
+                        cache.getName(), key, exception);
+            }
+
+            @Override
+            public void handleCacheClearError(RuntimeException exception, Cache cache) {
+                log.error("Cache CLEAR failed for {} - STALE entries may be served until their TTL expires",
+                        cache.getName(), exception);
+            }
+        };
+    }
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
-                                          ObjectMapper objectMapper) {
+    public RedisCacheManager cacheManager(RedisCacheWriter cacheWriter, ObjectMapper objectMapper) {
 
         // The shared app ObjectMapper has no polymorphic type info enabled
         // (Boot's default, and rightly so - unrestricted default typing is
@@ -113,10 +203,14 @@ public class CacheConfig {
 
         Map<String, RedisCacheConfiguration> perCache = Map.of(
                 PRODUCTS_CACHE, defaults.entryTtl(jitter(Duration.ofMinutes(10))),
-                PRODUCT_LISTINGS_CACHE, defaults.entryTtl(jitter(Duration.ofMinutes(2)))
+                PRODUCT_LISTINGS_CACHE, defaults.entryTtl(jitter(Duration.ofMinutes(2))),
+                // Categories are seeded taxonomy (V2 migration) with no write
+                // path in this service at all - the only invalidation is a
+                // redeploy or this TTL, so it can be far longer than products.
+                CATEGORIES_CACHE, defaults.entryTtl(jitter(Duration.ofHours(1)))
         );
 
-        return RedisCacheManager.builder(connectionFactory)
+        return RedisCacheManager.builder(cacheWriter)
                 .cacheDefaults(defaults)
                 .withInitialCacheConfigurations(perCache)
                 // transactionAware(): cache puts/evicts are deferred until the
