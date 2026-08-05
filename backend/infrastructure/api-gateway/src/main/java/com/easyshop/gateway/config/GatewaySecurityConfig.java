@@ -91,6 +91,17 @@ public class GatewaySecurityConfig {
                         .pathMatchers(HttpMethod.GET,
                                 "/api/v1/products/**", "/api/v1/categories/**",
                                 "/api/v1/reviews/products/**").permitAll()
+                        // Guest carts: anonymous shoppers, so ALL methods are open
+                        // here, not just GET - a guest has to be able to add and
+                        // remove items too. This mirrors the identical permitAll in
+                        // cart-service's own SecurityConfig; without BOTH, the
+                        // gateway 401s anonymous cart calls before they ever reach
+                        // the service. Authorization is possession of the
+                        // unguessable X-Cart-Token, checked nowhere else because
+                        // for an anonymous cart the token IS the credential.
+                        // /api/v1/cart/merge is deliberately NOT here - it needs a
+                        // real user and falls through to the catch-all below.
+                        .pathMatchers("/api/v1/cart/guest", "/api/v1/cart/guest/**").permitAll()
                         // /oauth2/authorization/** and /login/oauth2/code/** are handled
                         // by the oauth2Login filters before authorization — no explicit
                         // permitAll needed.

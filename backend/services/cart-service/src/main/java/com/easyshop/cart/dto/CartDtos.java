@@ -44,6 +44,13 @@ public final class CartDtos {
             @Min(1) @Max(99) int quantity
     ) {}
 
+    /**
+     * Handed out by POST /api/v1/cart/guest. This token IS the only credential
+     * for the cart it names, so it is minted server-side and never echoed back
+     * from client input - see GuestCartController.
+     */
+    public record GuestTokenResponse(String token) {}
+
     public record CartResponse(
             List<CartItem> items,
             int totalItems,

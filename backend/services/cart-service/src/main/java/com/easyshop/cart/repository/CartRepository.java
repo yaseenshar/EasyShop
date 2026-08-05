@@ -1,5 +1,6 @@
 package com.easyshop.cart.repository;
 
+import com.easyshop.cart.config.CartProperties;
 import com.easyshop.cart.dto.CartDtos.CartItem;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -11,8 +12,8 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Repository over the Redis Hash cart model: key cart:{userId}, one hash
- * field per productId, value = CartItem as JSON.
+ * Repository over the Redis Hash cart model: key cart:{userId} (or
+ * cart:guest:{token}), one hash field per productId, value = CartItem as JSON.
  *
  * Why a hand-rolled repository over Spring Data Redis's @RedisHash
  * repositories: @RedisHash maps an entity to a hash PLUS maintains
@@ -24,38 +25,42 @@ import java.util.UUID;
  * model in the first place. When the abstraction hides the property you
  * chose the technology for, drop the abstraction.
  *
- * SLIDING TTL: every mutation re-arms a 30-day expiry. An actively
- * tended cart lives indefinitely; an abandoned one silently evaporates -
- * no cleanup job, no cron, no tombstones. This is the lifecycle argument
- * for Redis-as-primary-store made concrete.
+ * SLIDING TTL: every mutation re-arms the expiry for that cart's key-space
+ * (see CartProperties - 30d authenticated, 7d guest). An actively tended cart
+ * lives indefinitely; an abandoned one silently evaporates - no cleanup job,
+ * no cron, no tombstones. This is the lifecycle argument for
+ * Redis-as-primary-store made concrete.
+ *
+ * Reads deliberately do NOT re-arm the TTL: "abandoned" is defined as
+ * not-modified, so the expiry clock measures time since the last real change
+ * rather than time since the last page view. Refreshing on read would turn
+ * every cart GET into a write and would keep a cart alive forever for anyone
+ * who merely has the page open.
  */
 @Repository
 public class CartRepository {
 
-    private static final Duration CART_TTL = Duration.ofDays(30);
-
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
+    private final CartProperties cartProperties;
 
-    public CartRepository(StringRedisTemplate redis, ObjectMapper objectMapper) {
+    public CartRepository(StringRedisTemplate redis, ObjectMapper objectMapper,
+                          CartProperties cartProperties) {
         this.redis = redis;
         this.objectMapper = objectMapper;
+        this.cartProperties = cartProperties;
     }
 
-    private String key(UUID userId) {
-        return "cart:" + userId;
-    }
-
-    public List<CartItem> findAll(UUID userId) {
-        Map<Object, Object> entries = redis.opsForHash().entries(key(userId));
+    public List<CartItem> findAll(CartKey cart) {
+        Map<Object, Object> entries = redis.opsForHash().entries(cart.redisKey());
         return entries.values().stream()
                 .map(v -> deserialize((String) v))
                 .sorted((a, b) -> a.addedAt().compareTo(b.addedAt()))
                 .toList();
     }
 
-    public CartItem find(UUID userId, UUID productId) {
-        Object value = redis.opsForHash().get(key(userId), productId.toString());
+    public CartItem find(CartKey cart, UUID productId) {
+        Object value = redis.opsForHash().get(cart.redisKey(), productId.toString());
         return value == null ? null : deserialize((String) value);
     }
 
@@ -65,22 +70,36 @@ public class CartRepository {
      * product is last-write-wins - accepted deliberately (see the Phase 8
      * proportionality rationale vs inventory's optimistic locking).
      */
-    public void put(UUID userId, CartItem item) {
-        redis.opsForHash().put(key(userId), item.productId().toString(), serialize(item));
-        touch(userId);
+    public void put(CartKey cart, CartItem item) {
+        redis.opsForHash().put(cart.redisKey(), item.productId().toString(), serialize(item));
+        touch(cart);
     }
 
-    public void remove(UUID userId, UUID productId) {
-        redis.opsForHash().delete(key(userId), productId.toString());
-        touch(userId);
+    public void remove(CartKey cart, UUID productId) {
+        redis.opsForHash().delete(cart.redisKey(), productId.toString());
+        touch(cart);
     }
 
-    public void clear(UUID userId) {
-        redis.delete(key(userId));
+    public void clear(CartKey cart) {
+        redis.delete(cart.redisKey());
     }
 
-    private void touch(UUID userId) {
-        redis.expire(key(userId), CART_TTL);
+    /** Remaining lifetime of a cart, or null if the key is absent or has no expiry. */
+    public Duration timeToLive(CartKey cart) {
+        Long seconds = redis.getExpire(cart.redisKey());
+        return (seconds == null || seconds < 0) ? null : Duration.ofSeconds(seconds);
+    }
+
+    /**
+     * Re-arms the expiry for this cart's key-space.
+     *
+     * Note this is a no-op when the key does not exist, which is exactly what
+     * we want after removing the LAST item: Redis deletes a hash once its final
+     * field is gone, so there is no empty husk left behind to expire, and EXPIRE
+     * against the missing key simply returns false rather than resurrecting it.
+     */
+    private void touch(CartKey cart) {
+        redis.expire(cart.redisKey(), cartProperties.ttlFor(cart));
     }
 
     private String serialize(CartItem item) {

@@ -43,7 +43,24 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**").permitAll()
 
-                        // TODO: align pattern with your actual controllers.
+                        // GUEST CARTS: anonymous by definition - a shopper who has
+                        // not signed in has no token to present, so requiring one
+                        // would defeat the feature. Authorization for these carts is
+                        // possession of the unguessable X-Cart-Token (see
+                        // GuestCartController), not a role.
+                        //
+                        // ORDER IS LOAD-BEARING: these two entries MUST precede the
+                        // /api/v1/cart/** rule below. Spring Security applies the
+                        // FIRST matching rule and stops - reversed, the CUSTOMER rule
+                        // would swallow /api/v1/cart/guest/** and every anonymous
+                        // request would 403. Both patterns are listed because
+                        // /api/v1/cart/guest/** alone is not guaranteed to match the
+                        // bare /api/v1/cart/guest used to mint a token.
+                        .requestMatchers("/api/v1/cart/guest", "/api/v1/cart/guest/**").permitAll()
+
+                        // Everything else on the cart API, INCLUDING /api/v1/cart/merge,
+                        // still needs a customer: merging has to know whose account
+                        // cart is the destination, and only a verified JWT can say.
                         .requestMatchers("/api/v1/cart/**").hasRole("CUSTOMER")
 
                         .anyRequest().authenticated()

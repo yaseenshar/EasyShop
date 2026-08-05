@@ -28,6 +28,15 @@ spring:
         jwt:
           issuer-uri: http://localhost:8090/realms/easyshop
 
+# Cart expiry policy. Sliding TTLs, re-armed on every mutation - see
+# CartProperties for why guest and session carts get different lifetimes.
+# Tunable per environment without a rebuild; both must be positive durations
+# or the service fails fast at startup.
+easyshop:
+  cart:
+    session-ttl: 30d
+    guest-ttl: 7d
+
 eureka:
   client:
     service-url:
