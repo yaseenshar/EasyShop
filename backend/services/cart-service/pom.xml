@@ -60,6 +60,21 @@
             <groupId>com.easyshop</groupId>
             <artifactId>common-lib</artifactId>
         </dependency>
+
+        <!-- TTL behaviour is only observable against a real Redis: EXPIRE/TTL
+             semantics and "HDEL of the last field deletes the key" are server
+             behaviours, not client ones, so an embedded fake would assert
+             nothing worth knowing. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

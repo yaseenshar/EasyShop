@@ -246,6 +246,21 @@ if [ -n "$T_SERVICE" ]; then
   expect "SERVICE    GET $CART_PATH" "$T_SERVICE" GET "$GATEWAY_URL$CART_PATH" 403
 fi
 
+# Guest carts are the one anonymous WRITE surface in the system, so they get
+# their own adversarial pass. This is the only place the GATEWAY half of the
+# guest permitAll is checked - cart-service's own GuestCartWebIntegrationTest
+# covers its local chain, but a missing rule in GatewaySecurityConfig 401s the
+# request before it ever reaches the service, and no unit test in that module
+# would notice.
+expect "no token   POST $CART_PATH/guest (anonymous mint)" "" POST "$GATEWAY_URL$CART_PATH/guest" 201
+# Possession of the token IS the authorization for a guest cart, so an
+# authenticated persona is neither required nor rejected here.
+expect_authorized "CUSTOMER   POST $CART_PATH/guest" "$T_CUSTOMER" POST "$GATEWAY_URL$CART_PATH/guest"
+# The permitAll must stop at /guest. If it ever widens to the whole cart
+# prefix, merge becomes an anonymous write into a REAL user's cart - this is
+# the assertion that catches it.
+expect "no token   POST $CART_PATH/merge (still authenticated)" "" POST "$GATEWAY_URL$CART_PATH/merge" 401
+
 echo
 echo "== [6] orders: checkout is a CUSTOMER act =="
 expect            "no token   POST checkout" ""            POST "$GATEWAY_URL$CHECKOUT_PATH" 401 '{}'

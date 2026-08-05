@@ -172,10 +172,37 @@ services:
     # maxmemory trimmed 512m -> 128m: dev cart/cache/idempotency data is
     # tiny. appendonly added because cart-service uses Redis as PRIMARY
     # store (Phase 8) - AOF bounds crash loss to ~1s vs RDB's ~60s.
+    #
+    # EVICTION POLICY: noeviction, NOT allkeys-lru. This one instance is shared
+    # by six services with no logical-db separation - api-gateway (rate limits),
+    # order, payment (idem:*), catalog (cache), cart (cart:*), notification -
+    # and maxmemory-policy is per INSTANCE, so a single policy has to be correct
+    # for the most valuable data in it, not the average.
+    #
+    # allkeys-lru evicts ANY key under memory pressure, including keys that have
+    # not expired. For cart that is silent data loss with no recovery path:
+    # Redis is the cart's primary store, so an evicted cart is simply gone -
+    # there is no database behind it to re-read. Catalog's cache filling this
+    # instance up was enough to delete real shoppers' carts.
+    #
+    # noeviction instead rejects WRITES with an OOM error once memory is full.
+    # That is the right trade for a store holding primary data: fail loudly and
+    # recoverably rather than lose committed state silently. It is safe here
+    # because every consumer already degrades gracefully on a Redis write
+    # failure - catalog's CacheErrorHandler logs and falls back to MySQL, and
+    # payment's idempotency begin() fails OPEN onto the orders table's UNIQUE
+    # constraint. The one thing none of them can recover from is data that
+    # vanished without an error, which is precisely what allkeys-lru produced.
+    #
+    # PRODUCTION ESCALATION: split this into two instances - a cache instance
+    # (allkeys-lru, disposable, no AOF) and a data instance (noeviction, AOF,
+    # holding cart:* and idem:*). Then each policy matches its data instead of
+    # one policy having to cover both. Single instance is kept here because dev
+    # compose values memory footprint over isolation.
     command: >
       redis-server
       --maxmemory 128mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
       --appendonly yes
       --appendfsync everysec
       --requirepass ${REDIS_PASSWORD}
