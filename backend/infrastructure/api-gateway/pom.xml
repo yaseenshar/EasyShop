@@ -54,9 +54,34 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
         </dependency>
+
+        <!-- BFF sessions in Redis instead of the default in-memory
+             WebSessionStore: without this a gateway restart or a second replica
+             logs every user out, and each of those logouts costs Keycloak a
+             full authorization-code round trip to undo. Boot's
+             SessionDataRedisAutoConfiguration has a reactive path that picks
+             this up automatically. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-session-data-redis</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.easyshop</groupId>
             <artifactId>common-lib</artifactId>
+        </dependency>
+
+        <!-- The reactive JWKS throttle is the internet-facing one; its fetch
+             counts are verified against a real HTTP endpoint, same as the
+             servlet version in common-lib. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
