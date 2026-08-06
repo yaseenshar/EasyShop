@@ -47,6 +47,16 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- JWKS fetch throttling is a behaviour of the real Nimbus/Spring
+             decoder against a real HTTP endpoint - the whole question is how
+             many times a socket gets opened, which only an actual server can
+             answer. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
             <optional>true</optional>
         </dependency>
     </dependencies>

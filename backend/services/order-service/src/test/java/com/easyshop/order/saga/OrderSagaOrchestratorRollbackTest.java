@@ -24,6 +24,7 @@ import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.JpaVendorAdapter;
@@ -187,7 +188,12 @@ class OrderSagaOrchestratorRollbackTest {
         var ack = mock(Acknowledgment.class);
         String failurePayload = objectMapper.writeValueAsString(
                 new PaymentFailedEvent(orderId, "Card declined by issuer", Instant.now()));
-        orchestrator.onPaymentReply(failurePayload, ack);
+        // onPaymentReply takes the ConsumerRecord since dd98f19 (it needs the
+        // headers, not just the payload) and only reads record.value(), so the
+        // topic/partition/offset here are placeholders.
+        orchestrator.onPaymentReply(
+                new ConsumerRecord<>(SagaTopics.PAYMENT_CHARGE_REPLY, 0, 0L, orderId.toString(), failurePayload),
+                ack);
 
         Order reloadedOrder = orderRepository.findById(orderId).orElseThrow();
         OrderSagaState saga = sagaRepository.findById(orderId).orElseThrow();

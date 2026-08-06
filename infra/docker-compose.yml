@@ -118,8 +118,16 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
       GATEWAY_BFF_CLIENT_SECRET: ${GATEWAY_BFF_CLIENT_SECRET}
+      # Encrypts the access/refresh token VALUES the gateway now stores in
+      # Redis. The gateway refuses to start without it rather than fall back to
+      # writing them in the clear. Generate once and keep in .env alongside the
+      # BFF secret:  openssl rand -base64 32
+      GATEWAY_TOKEN_ENCRYPTION_KEY: ${GATEWAY_TOKEN_ENCRYPTION_KEY}
     depends_on:
       service-discovery: { condition: service_started }
+      # Now a HARD dependency, not just for rate limiting: BFF sessions and
+      # relayed tokens live in Redis, so a gateway that starts without it cannot
+      # log anybody in.
       redis: { condition: service_healthy }
     networks: [easyshop-network]
 
@@ -174,8 +182,10 @@ services:
     # store (Phase 8) - AOF bounds crash loss to ~1s vs RDB's ~60s.
     #
     # EVICTION POLICY: noeviction, NOT allkeys-lru. This one instance is shared
-    # by six services with no logical-db separation - api-gateway (rate limits),
-    # order, payment (idem:*), catalog (cache), cart (cart:*), notification -
+    # by six services with no logical-db separation - api-gateway (rate limits,
+    # BFF sessions under easyshop:gateway:session:*, and encrypted relayed
+    # tokens under gateway:oauth2:client:*), order, payment (idem:*), catalog
+    # (cache), cart (cart:*), notification -
     # and maxmemory-policy is per INSTANCE, so a single policy has to be correct
     # for the most valuable data in it, not the average.
     #
@@ -330,6 +340,14 @@ services:
       <<: [*spring_env, *oidc]
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/easyshop_user
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # This service declares no Redis dependency of its own, but common-lib
+      # brings spring-boot-starter-data-redis onto every classpath, so Boot
+      # auto-configures a connection regardless. Without these it dials
+      # localhost:6379 inside the container, gets connection-refused, and
+      # /actuator/health reports DOWN - which reads like a broken service
+      # rather than a missing environment variable.
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
     depends_on:
       postgres: { condition: service_healthy }
       service-discovery: { condition: service_started }
@@ -390,6 +408,9 @@ services:
       SPRING_DATASOURCE_USERNAME: easyshop
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # See the note on user-service: common-lib puts Redis on every classpath.
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
     depends_on:
       mysql: { condition: service_healthy }
       kafka: { condition: service_healthy }
@@ -428,6 +449,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/easyshop_review?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: easyshop
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      # See the note on user-service: common-lib puts Redis on every classpath.
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
     depends_on:
       mysql: { condition: service_healthy }
       service-discovery: { condition: service_started }

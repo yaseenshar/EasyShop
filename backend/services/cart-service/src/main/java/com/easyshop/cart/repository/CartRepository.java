@@ -7,6 +7,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -55,7 +56,7 @@ public class CartRepository {
         Map<Object, Object> entries = redis.opsForHash().entries(cart.redisKey());
         return entries.values().stream()
                 .map(v -> deserialize((String) v))
-                .sorted((a, b) -> a.addedAt().compareTo(b.addedAt()))
+                .sorted(Comparator.comparing(CartItem::addedAt))
                 .toList();
     }
 

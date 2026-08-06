@@ -4,6 +4,8 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.security.oauth2.server.resource.autoconfigure.JwkSetUriJwtDecoderBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 
@@ -39,6 +41,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(JwtAuthenticationConverter.class)
+@EnableConfigurationProperties(JwksProperties.class)
 public class SecurityCommonAutoConfiguration {
 
     @Bean
@@ -47,5 +50,25 @@ public class SecurityCommonAutoConfiguration {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(new KeycloakRolesConverter());
         return converter;
+    }
+
+    /**
+     * Bounds how often a token with an unrecognised "kid" can make this service
+     * call Keycloak - see JwksProperties for the measured amplification this
+     * closes, and ThrottlingJwkSetRestTemplate for why the fix sits on the
+     * transport rather than on the JwtDecoder.
+     *
+     * Boot applies this customizer to BOTH decoder paths (jwk-set-uri and
+     * issuer-uri), so every service picks it up from common-lib with no local
+     * wiring - the same "drop it on the classpath" mechanism as the converter
+     * above. The api-gateway is reactive and gets its own equivalent; this
+     * configuration is servlet-only and must never leak into it.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public JwkSetUriJwtDecoderBuilderCustomizer throttledJwkSetFetchCustomizer(JwksProperties properties) {
+        ThrottlingJwkSetRestTemplate restTemplate =
+                new ThrottlingJwkSetRestTemplate(properties.minRefreshInterval());
+        return builder -> builder.restOperations(restTemplate);
     }
 }

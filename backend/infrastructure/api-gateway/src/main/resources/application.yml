@@ -118,6 +118,27 @@ spring:
       # order-service/application.yml's twin fix and comment for the full story).
       timeout: 500ms
 
+  # BFF sessions live in Redis (spring-boot-session-data-redis on the classpath
+  # is what switches the reactive store over). Before this, a gateway restart or
+  # a second replica logged every user out, and each of those logouts cost
+  # Keycloak a full authorization-code round trip to undo.
+  #
+  # timeout is Spring Session's own idle expiry - deliberately NOT duplicated
+  # into an easyshop.* property, since two knobs for one value eventually
+  # disagree. easyshop.gateway.session.authorized-client-ttl below defaults to
+  # match it; change them together.
+  session:
+    timeout: 30m
+    # NOTE the prefix: spring.session.DATA.redis.namespace. Boot 4 binds this
+    # under SessionDataRedisProperties("spring.session.data.redis") - the
+    # older spring.session.redis.* form is not an error, it is simply never
+    # read, and keys quietly land under the default "spring:session" prefix
+    # instead. Caught by RedisWebSessionRestartIntegrationTest, which asserts
+    # the namespace actually takes effect rather than trusting the property.
+    data:
+      redis:
+        namespace: easyshop:gateway:session
+
   security:
     oauth2:
       client:
@@ -263,3 +284,26 @@ resilience4j:
       # a saga — slower
       cartCb:    { baseConfig: default }
       reviewCb:  { baseConfig: default }
+# ---------------------------------------------------------------------------
+# BFF session storage.
+#
+# token-encryption-key encrypts the access/refresh token VALUES before they are
+# written to Redis. It is mandatory - the gateway refuses to start without a
+# valid 32-byte Base64 key - because the alternative, silently falling back to
+# plaintext, would put every logged-in user's refresh token on disk in the clear
+# with nothing about the running system looking wrong. Every service in the
+# compose file shares one Redis password, so encryption here is what stops "can
+# read Redis" from meaning "can impersonate every logged-in user".
+#
+# Generate with:  openssl rand -base64 32
+# Rotating it invalidates stored tokens: users sign in again, which is exactly
+# the old restart behaviour and no worse.
+# ---------------------------------------------------------------------------
+easyshop:
+  gateway:
+    session:
+      token-encryption-key: ${GATEWAY_TOKEN_ENCRYPTION_KEY}
+      # Matches spring.session.timeout above - a token set that outlives its
+      # session is unreachable, so keeping it only leaves a decryptable
+      # credential on disk longer than anything can use it.
+      authorized-client-ttl: 30m

@@ -14,7 +14,11 @@ import org.springframework.security.oauth2.server.resource.web.server.BearerToke
 import org.springframework.security.web.server.DelegatingServerAuthenticationEntryPoint;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.RedirectServerAuthenticationEntryPoint;
+import org.springframework.security.web.server.authentication.logout.DelegatingServerLogoutHandler;
+import org.springframework.security.web.server.authentication.logout.WebSessionServerLogoutHandler;
 import org.springframework.security.web.server.util.matcher.MediaTypeServerWebExchangeMatcher;
+
+import com.easyshop.gateway.session.RemoveAuthorizedClientLogoutHandler;
 
 /**
  * Hybrid gateway security: OAuth2 client (BFF) + OAuth2 resource server.
@@ -48,7 +52,8 @@ import org.springframework.security.web.server.util.matcher.MediaTypeServerWebEx
 public class GatewaySecurityConfig {
 
     @Bean
-    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
+    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http,
+            org.springframework.security.oauth2.client.ReactiveOAuth2AuthorizedClientService authorizedClientService) {
         var htmlMatcher = new MediaTypeServerWebExchangeMatcher(MediaType.TEXT_HTML);
         htmlMatcher.setIgnoredMediaTypes(Set.of(MediaType.ALL));
 
@@ -114,7 +119,22 @@ public class GatewaySecurityConfig {
                 .exceptionHandling(exceptionHandling -> exceptionHandling
                         .authenticationEntryPoint(entryPoint)
                 )
-                .logout(logout -> logout.logoutSuccessHandler(logoutSuccessHandler))
+                // Sessions and tokens now OUTLIVE the process, so logout has to
+                // delete them rather than rely on the JVM exiting. Two handlers,
+                // because Spring's default chain covers neither completely:
+                //   - WebSessionServerLogoutHandler invalidates the WebSession,
+                //     which with Spring Session means the Redis key is deleted.
+                //     The default SecurityContextServerLogoutHandler only clears
+                //     the context attribute, leaving the session itself alive.
+                //   - RemoveAuthorizedClientLogoutHandler deletes the stored
+                //     access/refresh tokens, which nothing in Spring's chain
+                //     does - harmless when they lived in a map that died with
+                //     the process, a live credential left on disk now.
+                .logout(logout -> logout
+                        .logoutHandler(new DelegatingServerLogoutHandler(
+                                new WebSessionServerLogoutHandler(),
+                                new RemoveAuthorizedClientLogoutHandler(authorizedClientService)))
+                        .logoutSuccessHandler(logoutSuccessHandler))
                 // DEV-ONLY: cookie sessions make the gateway CSRF-relevant (the
                 // resource-server-only gateway was not). Disabled for local dev —
                 // recorded in the handoff §7 "reverse before production" list.
