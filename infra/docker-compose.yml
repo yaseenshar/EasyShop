@@ -64,6 +64,47 @@ x-spring-env: &spring_env
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
   EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-discovery:8761/eureka/
   EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
+  # TRACE EXPORT. Set on the shared anchor rather than in nine application.yml
+  # files because the endpoint is a property of WHERE the service runs, not of
+  # the service - locally there is no Jaeger on this hostname, and a value
+  # baked into the jar would be wrong in every environment except this one.
+  #
+  # Boot's default is http://localhost:4318/v1/traces, which inside a container
+  # resolves to the container itself: spans are built, exported, silently fail
+  # to send, and nothing appears in Jaeger while every service looks healthy.
+  # That default is why "tracing is configured" and "traces exist" are not the
+  # same claim.
+  #
+  # HTTP/protobuf on 4318 rather than gRPC on 4317 - both are enabled on the
+  # Jaeger container below; HTTP is the easier one to curl when debugging why
+  # spans are not arriving.
+  #
+  # MIND THE PREFIX. Boot 4 moved this to management.opentelemetry.tracing.
+  # export.otlp.*; the Boot 3 spelling (management.otlp.tracing.endpoint) binds
+  # to NOTHING and the exporter quietly falls back to localhost:4318 - which
+  # inside a container is itself. Verified against OtlpTracingProperties in
+  # spring-boot-micrometer-tracing-opentelemetry 4.1.0 after exactly that
+  # produced a fleet with tracing "configured" and zero spans in Jaeger.
+  MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+  # OTLP METRICS export is a separate feature that the same starter switches ON
+  # by default, and it does NOT share the relocated prefix - it is still
+  # management.otlp.metrics.export.* (checked, not assumed). Prometheus already
+  # scrapes these services, so this second export path is pure duplication; left
+  # enabled it retries against localhost:4318 every step and fills the logs with
+  # stack traces that look like a tracing failure but are not.
+  MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "false"
+  # KAFKA TRACE PROPAGATION IS NOT CONFIGURED HERE, deliberately, and this
+  # comment exists so nobody adds it back.
+  #
+  # spring.kafka.template.observation-enabled and its listener twin only apply
+  # to Boot's AUTO-CONFIGURED Kafka beans. All four Kafka services build their
+  # own KafkaTemplate and ConcurrentKafkaListenerContainerFactory in a
+  # KafkaConfig class, which replaces Boot's - so those properties bind
+  # successfully and have no effect whatsoever. Setting them here produced a
+  # saga that ran end to end while emitting zero Kafka spans, which reads
+  # exactly like tracing being broken rather than config being inert.
+  # Observation is switched on at the bean instead; see KafkaConfig in
+  # order/payment/inventory/notification-service.
 
 # App healthchecks note: temurin/alpine JRE images ship no curl (ubuntu
 # base) or no bash (alpine base), so portable in-compose probes for the
@@ -528,6 +569,38 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
     depends_on: [kafka]
+    networks: [easyshop-network]
+
+  # Jaeger all-in-one: collector, storage and UI in one container.
+  #
+  # NO SEPARATE OTEL COLLECTOR. Jaeger has accepted OTLP natively since 1.35, so
+  # the services export straight to it. A collector in between is the right call
+  # when you need fan-out to several backends, tail sampling, or redaction - none
+  # of which apply here, and each hop is another place for spans to vanish
+  # silently. Add one when there is a second consumer, not before.
+  #
+  # IN-MEMORY STORAGE, deliberately unlike Prometheus next door, which just got a
+  # volume. Traces here are a debugging aid for the session you are in, not a
+  # historical record, and all-in-one's memory store is capped by
+  # MEMORY_MAX_TRACES so it cannot grow without bound. A durable trace store
+  # means Elasticsearch or Cassandra, which is a real dependency and its own
+  # ticket - a restart losing traces is an acceptable trade, a restart losing
+  # metric history was not.
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    profiles: ["observability"]
+    ports:
+      - "16686:16686"   # UI
+      - "4318:4318"     # OTLP/HTTP  - what the services export to
+      - "4317:4317"     # OTLP/gRPC  - exposed for parity, unused by default
+    mem_limit: 384m
+    environment:
+      # OTLP is NOT on by default in all-in-one 1.57; without this the ports
+      # listen for nothing and every export is refused.
+      COLLECTOR_OTLP_ENABLED: "true"
+      # Bounded ring buffer - oldest traces are dropped rather than the process
+      # growing until the 384m limit kills it mid-investigation.
+      MEMORY_MAX_TRACES: "20000"
     networks: [easyshop-network]
 
   prometheus:

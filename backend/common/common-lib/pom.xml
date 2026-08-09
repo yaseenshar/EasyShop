@@ -49,6 +49,18 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- OTel API only (not the starter): BaseOutboxEvent captures the
+             trace context from a JPA @PrePersist callback, which is not a Spring
+             bean and cannot inject a Propagator. Span.current() is the static,
+             context-reading API designed for exactly that. Optional so it never
+             lands on a consumer that has not asked for tracing - every use site
+             degrades to a no-op when the span is absent. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- micrometer-core only (not the whole actuator starter): common-lib
              needs MeterFilter/MeterRegistry to COMPILE the fleet-wide meter
              configuration, but must not force actuator onto a consumer that

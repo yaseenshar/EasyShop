@@ -217,6 +217,24 @@ management:
       access: unrestricted
     health:
       show-details: always
+
+  # TRACING. The gateway is the trace ROOT - it is where a request first enters
+  # the system, so it is where a trace id gets minted and, crucially, where the
+  # sampling decision is MADE. That decision travels downstream in the W3C
+  # traceparent header's sampled flag, and every service honours it rather than
+  # re-deciding. Set this to 0.1 here and the eight downstream services' own
+  # probability: 1.0 becomes irrelevant - they would faithfully record 10% of
+  # traces, because the root already threw the rest away.
+  #
+  # 1.0 IS A DEVELOPMENT SETTING. Tracing every request is what you want while
+  # building and debugging; in production it is a per-request cost on the hot
+  # path plus a proportional bill at the trace backend. The usual production
+  # shape is a low head-based rate (1-10%) or tail sampling that keeps errors
+  # and slow requests. Changing it is a one-line edit HERE, not in nine files -
+  # which is precisely why the root's setting is the one that matters.
+  tracing:
+    sampling:
+      probability: 1.0
   health:
     circuitbreakers:
       enabled: true

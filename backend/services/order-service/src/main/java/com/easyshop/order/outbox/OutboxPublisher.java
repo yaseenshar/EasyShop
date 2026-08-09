@@ -1,5 +1,8 @@
 package com.easyshop.order.outbox;
 
+import com.easyshop.common.outbox.TraceContextCodec;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import com.easyshop.order.repository.OutboxRepository;
 import jakarta.transaction.Transactional;
 import lombok.extern.log4j.Log4j2;
@@ -35,7 +38,13 @@ public class OutboxPublisher {
 
         batch.forEach(event -> {
             try {
-                kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(), event.getPayload()).get();
+                // Sent inside the trace context captured when the row was
+                // written, so the producer span - and everything the consumer
+                // does downstream - is a child of the ORIGINATING request
+                // rather than of this polling task. See AbstractOutboxPublisher
+                // in common-lib for the same logic; this service has its own
+                // copy because its outbox classes predate that shared base.
+                sendWithinOriginatingTrace(event);
                 event.markPublished();
                 log.info("Publishing event {} of type {} for aggregate {} to topic {}",
                         event.getId(), event.getEventType(), event.getAggregateId(), event.getTopic());
@@ -44,5 +53,26 @@ public class OutboxPublisher {
                 throw new RuntimeException(e);
             }
         });
+    }
+
+    /**
+     * Makes the stored trace context current for the duration of the send.
+     *
+     * The scope is what matters, not the headers: Spring Kafka's producer
+     * observation reads the CURRENT context to choose its parent and to inject
+     * the outgoing traceparent, so restoring the context is enough to graft the
+     * whole downstream chain back onto the original trace. With no stored
+     * context the send proceeds normally and roots its own trace - correct for
+     * rows written before this existed, and far better than dropping an event.
+     */
+    private void sendWithinOriginatingTrace(OutboxEvent event) throws Exception {
+        Context originating = TraceContextCodec.restore(event.getTraceParent());
+        if (originating == null) {
+            kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(), event.getPayload()).get();
+            return;
+        }
+        try (Scope ignored = originating.makeCurrent()) {
+            kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(), event.getPayload()).get();
+        }
     }
 }

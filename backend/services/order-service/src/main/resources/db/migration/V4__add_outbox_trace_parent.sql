@@ -1,0 +1,16 @@
+-- Carries the W3C traceparent of the request that produced each outbox event.
+--
+-- The outbox deliberately breaks the causal thread: a request writes a row and
+-- returns, and a scheduled publisher sends it later on a different thread.
+-- Trace context is thread-local, so nothing survives that handoff unless it is
+-- written down. Without this column every publish started a fresh trace, and a
+-- checkout appeared in Jaeger as a chain of disconnected traces instead of one
+-- story (measured: 38 of 38 publisher spans were trace roots).
+--
+-- NULLABLE ON PURPOSE. Rows written before this migration have no context, and
+-- an event produced outside any traced request legitimately has none either.
+-- The publisher treats null as "just send it" rather than refusing to publish -
+-- losing a trace link is acceptable, losing an event is not.
+--
+-- 55 chars is the exact W3C length: "00-" + 32 hex + "-" + 16 hex + "-" + 2 hex.
+ALTER TABLE outbox_events ADD COLUMN trace_parent VARCHAR(55);
