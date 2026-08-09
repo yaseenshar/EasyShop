@@ -1,0 +1,86 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  # Tracks how far into each log file Promtail has read. Inside the container
+  # only: on restart it re-reads from the beginning, which duplicates a little
+  # history rather than losing it - the right way round for a dev stack.
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Reads container stdout via the Docker socket rather than requiring services
+  # to push anywhere. Nothing in a request path depends on the log backend being
+  # up: if Loki is down, services still log to stdout exactly as before and
+  # Promtail backs off.
+  - job_name: easyshop-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+
+    relabel_configs:
+      # Scoped to this compose project, so anything else running on the same
+      # Docker host stays out of the index.
+      #
+      # Note this DOES include the project's infrastructure - postgres, mysql,
+      # kafka, redis, keycloak, and Promtail itself - because they are part of
+      # the same compose project. That is deliberate and useful: "the service
+      # errored because the database refused a connection" is a two-container
+      # story, and having only half of it is how you spend an hour blaming the
+      # wrong component. They are distinguishable by the service label.
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        regex: 'easyshop'
+        action: keep
+
+      # LABELS ARE THE INDEX in Loki, and every distinct combination is a
+      # separate stream - so only low-cardinality, queryable dimensions belong
+      # here. Container name and compose service are bounded by the number of
+      # services. Anything per-request (traceId, userId, orderId) must stay in
+      # the log BODY, where it is still searchable but does not multiply
+      # streams. This is the same cardinality discipline as the Prometheus tags.
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+
+    pipeline_stages:
+      # Docker wraps each line in its own JSON envelope {log, stream, time};
+      # unwrap it first or every downstream stage sees the envelope rather than
+      # the application's line.
+      - docker: {}
+
+      # Parse the application's own JSON. Services that are NOT emitting JSON
+      # (service-discovery, which does not depend on common-lib and so never
+      # received the shared logback config) simply fail this stage and pass
+      # through as plain text - Promtail does not drop them.
+      - json:
+          expressions:
+            level: level
+            logger: logger_name
+            traceId: traceId
+            service_name: service
+            timestamp: '"@timestamp"'
+
+      # Promoted to a label because it is bounded (five values) and is the
+      # dimension people filter on constantly: {service="cart-service",
+      # level="ERROR"}.
+      - labels:
+          level:
+
+      # traceId is deliberately NOT promoted to a label. It is unbounded - one
+      # value per request - and labelling it would create a new Loki stream for
+      # every request, which is the classic way to fall over. It stays in the
+      # body, where |= "4bf92f35..." still finds it.
+
+      # Use the application's timestamp rather than ingest time, so a shipper
+      # backlog does not silently reorder logs relative to traces.
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          # A line that fails the json stage has no timestamp; falling back to
+          # ingest time is better than dropping the line.
+          action_on_failure: fudge

@@ -1,0 +1,36 @@
+# Loki datasource, provisioned alongside Prometheus so Grafana comes up with
+# metrics AND logs already wired - no clicking through the UI, and it survives a
+# wiped grafana-data volume.
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    # Container address on easyshop-network. The host publishes 3100 too, but
+    # Grafana queries from inside the network - the same trap as the Prometheus
+    # datasource, where the published port resolves to nothing from in here.
+    url: http://loki:3100
+    jsonData:
+      # THE PAYOFF FOR STRUCTURED LOGGING: turns the traceId field in each JSON
+      # log line into a clickable link straight to that trace in Jaeger. This is
+      # the whole reason traceId is emitted as a field rather than left inside
+      # the message text - a regex over free-form text would break the first
+      # time someone reworded a log message.
+      derivedFields:
+        - name: TraceID
+          # Matches the traceId emitted by common-lib's logback-spring.xml.
+          matcherRegex: '"traceId":"(\w+)"'
+          url: '$${__value.raw}'
+          datasourceUid: jaeger
+    editable: true
+
+  # Declared so the derived field above has something to point at. Jaeger's own
+  # query API is on 16686; the UID is pinned because derivedFields references it
+  # by UID, and an auto-generated one would change between environments.
+  - name: Jaeger
+    type: jaeger
+    uid: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: true

@@ -93,6 +93,15 @@ x-spring-env: &spring_env
   # enabled it retries against localhost:4318 every step and fills the logs with
   # stack traces that look like a tracing failure but are not.
   MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "false"
+  # STRUCTURED LOGGING. Activates the json-logging profile, which swaps the
+  # console appender for the Logstash JSON encoder (see common-lib's
+  # logback-spring.xml). Containers only: locally the default stays
+  # human-readable, because JSON logs and multi-line stack traces on a terminal
+  # are the fastest way to make people stop reading logs entirely.
+  #
+  # Every line carries traceId and spanId as fields, which is what lets a log
+  # line found in Grafana link straight to its Jaeger trace.
+  SPRING_PROFILES_ACTIVE: json-logging
   # KAFKA TRACE PROPAGATION IS NOT CONFIGURED HERE, deliberately, and this
   # comment exists so nobody adds it back.
   #
@@ -125,6 +134,7 @@ volumes:
   kafka-data:
   grafana-data:
   prometheus-data:
+  loki-data:
 
 services:
 
@@ -569,6 +579,51 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
     depends_on: [kafka]
+    networks: [easyshop-network]
+
+  # LOG AGGREGATION: Loki + Promtail, NOT the ELK stack the ticket named.
+  #
+  # The reason is arithmetic, not preference. Elasticsearch alone wants ~1.5GB,
+  # plus Logstash and Kibana at ~0.5-1GB each - roughly 3GB. The application
+  # stack already peaks near 6.1GB of this machine's 7.8GB, so ELK and EasyShop
+  # cannot both run here; you would be choosing which one to have. Loki does the
+  # same job for this fleet at ~200MB because it indexes only labels and leaves
+  # the log body compressed, and it renders in the Grafana that is already
+  # deployed for metrics - so logs, metrics and a Jaeger link end up on one
+  # screen instead of three.
+  #
+  # The application side is backend-agnostic regardless: services emit
+  # Logstash-format JSON on stdout, which Elasticsearch, Loki, Datadog or
+  # anything else ingests. Swapping Loki for ELK later changes this file, not
+  # the services.
+  loki:
+    image: grafana/loki:3.1.0
+    profiles: ["observability"]
+    ports: ["3100:3100"]
+    mem_limit: 256m
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    networks: [easyshop-network]
+
+  # Promtail reads the containers' stdout straight off the Docker socket rather
+  # than requiring every service to push logs somewhere. That keeps the shipping
+  # concern entirely out of the applications - a service that cannot reach the
+  # log backend still logs normally to stdout, and nothing about a request path
+  # depends on the observability stack being up.
+  promtail:
+    image: grafana/promtail:3.1.0
+    profiles: ["observability"]
+    mem_limit: 128m
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./docker/promtail/promtail.yml:/etc/promtail/config.yml
+      # Read-only: this is the host's container log store and Promtail has no
+      # business writing to it.
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki: { condition: service_started }
     networks: [easyshop-network]
 
   # Jaeger all-in-one: collector, storage and UI in one container.
