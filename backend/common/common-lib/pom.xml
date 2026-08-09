@@ -49,6 +49,19 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- micrometer-core only (not the whole actuator starter): common-lib
+             needs MeterFilter/MeterRegistry to COMPILE the fleet-wide meter
+             configuration, but must not force actuator onto a consumer that
+             hasn't asked for it. Marked optional so it does not leak onto
+             consumers' classpaths; every service already pulls micrometer-core
+             transitively via spring-boot-starter-actuator, which is what makes
+             MetricsCommonAutoConfiguration's @ConditionalOnClass fire. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- JWKS fetch throttling is a behaviour of the real Nimbus/Spring
              decoder against a real HTTP endpoint - the whole question is how
              many times a socket gets opened, which only an actual server can

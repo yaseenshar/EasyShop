@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.easyshop.common.event.PaymentEvents.PaymentCompletedEvent;
 import com.easyshop.common.event.PaymentEvents.PaymentFailedEvent;
+import com.easyshop.common.metrics.BusinessMetrics;
 import com.easyshop.common.saga.SagaIdempotencyKeys;
 import com.easyshop.common.saga.SagaMessages.ChargePaymentCommand;
 import com.easyshop.payment.entity.PaymentTransaction;
@@ -37,19 +38,25 @@ public class PaymentChargeAndRefundTxn {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentChargeAndRefundTxn.class);
 
+    /** Charge attempts, tagged succeeded/declined - the payment failure rate. */
+    private static final String PAYMENT_CHARGES = "easyshop.payments.charges";
+
     private final PaymentGateway gateway;
     private final PaymentTransactionRepository transactionRepository;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final BusinessMetrics businessMetrics;
 
     public PaymentChargeAndRefundTxn(PaymentGateway gateway,
                                      PaymentTransactionRepository transactionRepository,
                                      OutboxRepository outboxRepository,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     BusinessMetrics businessMetrics) {
         this.gateway = gateway;
         this.transactionRepository = transactionRepository;
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
+        this.businessMetrics = businessMetrics;
     }
 
     @Transactional
@@ -75,6 +82,21 @@ public class PaymentChargeAndRefundTxn {
             reply = new PaymentFailedEvent(command.orderId(), result.failureReason(), Instant.now());
             writeToOutbox(tx.getOrderId(), "PaymentFailedEvent", "payment.charge.reply", reply);
         }
+
+        // Counted here rather than in PaymentSagaListener: the listener returns
+        // true for a decline AND for a duplicate redelivery, so counting there
+        // would conflate "the bank said no" with "Kafka delivered twice". This
+        // is the only place the gateway's actual answer is known.
+        //
+        // result.failureReason() is deliberately NOT a tag - it is free text
+        // from the PSP and would be unbounded. Success/failure is the bounded
+        // fact worth alerting on; the reason stays in the log line below.
+        //
+        // Deferred to afterCommit (see BusinessMetrics): this method is
+        // @Transactional and writes the outbox row in the same transaction, so
+        // a rollback here means no charge was recorded and no reply will ever
+        // be published - counting it would report a payment that never was.
+        businessMetrics.increment(PAYMENT_CHARGES, "outcome", result.success() ? "succeeded" : "declined");
 
         log.info("Payment {} for order {}: {}", result.success() ? "succeeded" : "failed",
                 command.orderId(), tx.getId());

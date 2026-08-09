@@ -22,7 +22,28 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        # prometheus added: the scrape config has always listed this service as
+        # a target, but the endpoint was neither on the classpath nor exposed,
+        # so the job silently returned 404 on every scrape.
+        include: health,info,prometheus,metrics
   endpoint:
     health:
       show-details: always
+
+  # THE ONE SERVICE THAT CANNOT INHERIT common-lib's meter configuration.
+  # MetricsCommonAutoConfiguration gives the other nine the application tag and
+  # these latency buckets automatically, but it arrives via common-lib - and
+  # common-lib pulls JPA, Redis, web and OAuth2 with it. Taking all of that into
+  # a Eureka server to set two meter properties is a bad trade, so they are
+  # spelled out here instead.
+  #
+  # KEEP THESE IN STEP with MetricsCommonAutoConfiguration. Duplicated values
+  # are exactly what that class exists to prevent; this is the one deliberate
+  # exception, and a dashboard built on these buckets breaks silently if the two
+  # ever diverge.
+  metrics:
+    tags:
+      application: service-discovery
+    distribution:
+      slo:
+        http.server.requests: 50ms,100ms,200ms,500ms,1s,2s,5s

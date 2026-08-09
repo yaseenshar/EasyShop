@@ -22,6 +22,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- Actuator alone gives /actuator/metrics but NOT /actuator/prometheus:
+             that endpoint only exists when a PrometheusMeterRegistry is on the
+             classpath. Without this the scrape target in
+             infra/docker/prometheus/prometheus.yml has been 404ing since it was
+             written - a monitored-looking service emitting nothing. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

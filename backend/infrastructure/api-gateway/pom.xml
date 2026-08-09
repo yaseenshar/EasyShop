@@ -46,6 +46,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- application.yml already lists "prometheus" in the actuator exposure
+             set, but the endpoint cannot exist without a PrometheusMeterRegistry
+             on the classpath - so the gateway, the one box every request passes
+             through, was publishing no scrapeable metrics at all. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis-reactive</artifactId>

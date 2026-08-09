@@ -77,6 +77,13 @@ public class GatewaySecurityConfig {
         http
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/actuator/health/**").permitAll()
+                        // Prometheus scrapes anonymously and would otherwise get a
+                        // 401 here - and this is the one process every request
+                        // passes through, so losing its metrics loses fleet-wide
+                        // latency and error rates. Same exposure trade as the
+                        // downstream services: fine on a dev-only published port,
+                        // production wants a separate management interface.
+                        .pathMatchers("/actuator/prometheus").permitAll()
                         // Route introspection: dev-only, matches the explicit
                         // management.endpoint.gateway.access: unrestricted grant in
                         // application.yml (that setting only unlocks actuator's OWN

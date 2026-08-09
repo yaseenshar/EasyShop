@@ -24,6 +24,8 @@ import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import com.easyshop.common.metrics.BusinessMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.orm.jpa.JpaTransactionManager;
@@ -81,6 +83,18 @@ class OrderSagaOrchestratorRollbackTest {
     @EnableTransactionManagement
     @Import(OrderSagaOrchestrator.class)
     static class TestConfig {
+
+        /**
+         * This context is hand-wired rather than a full @SpringBootTest (see the
+         * class note), so Boot's metrics auto-configuration never runs and no
+         * MeterRegistry exists. A SimpleMeterRegistry keeps the orchestrator's
+         * saga-outcome counters real in-process, which lets the rollback tests
+         * below assert on them rather than just tolerating them.
+         */
+        @Bean
+        BusinessMetrics businessMetrics() {
+            return new BusinessMetrics(new SimpleMeterRegistry());
+        }
 
         @Bean
         DataSource dataSource() {

@@ -7,6 +7,7 @@ import com.easyshop.cart.dto.CartDtos.UpdateQuantityRequest;
 import com.easyshop.cart.repository.CartKey;
 import com.easyshop.cart.service.CartService;
 import com.easyshop.common.dto.response.ApiResponse;
+import com.easyshop.common.metrics.BusinessMetrics;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,10 +45,25 @@ public class GuestCartController {
 
     static final String TOKEN_HEADER = "X-Cart-Token";
 
-    private final CartService cartService;
+    /**
+     * Denominator for the guest conversion rate; see CartService's GUEST_MERGES.
+     *
+     * NOT named ".created" - verified the hard way. OpenMetrics reserves the
+     * _created suffix for a counter's creation timestamp, so the Prometheus
+     * client strips it: "easyshop.carts.guest.created" was published as
+     * easyshop_carts_guest_total, silently losing the last word and colliding
+     * with any other easyshop.carts.guest.* meter. Nothing errors; the metric
+     * just quietly has a different name than the code says. Avoid _created,
+     * _total, _sum, _count and _bucket as trailing words in meter names.
+     */
+    private static final String GUEST_CARTS_ISSUED = "easyshop.carts.guest.issued";
 
-    public GuestCartController(CartService cartService) {
+    private final CartService cartService;
+    private final BusinessMetrics businessMetrics;
+
+    public GuestCartController(CartService cartService, BusinessMetrics businessMetrics) {
         this.cartService = cartService;
+        this.businessMetrics = businessMetrics;
     }
 
     /**
@@ -58,6 +74,7 @@ public class GuestCartController {
     @PostMapping
     public ResponseEntity<ApiResponse<GuestTokenResponse>> createGuestCart() {
         String token = UUID.randomUUID().toString();
+        businessMetrics.increment(GUEST_CARTS_ISSUED);
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 ApiResponse.success("Guest cart created", new GuestTokenResponse(token)));
     }
