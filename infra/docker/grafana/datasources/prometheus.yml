@@ -1,0 +1,26 @@
+# Grafana datasource provisioning.
+#
+# Without this file the datasources directory was mounted but empty, so Grafana
+# started with no connection to Prometheus at all - running, reachable, and
+# unable to draw a single graph until somebody added the datasource by hand
+# through the UI. Provisioning it means that survives a wiped grafana-data
+# volume, which hand-clicking does not.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # CONTAINER address, not the host one. Grafana queries Prometheus from
+    # inside easyshop-network, where it listens on 9090; localhost:9091 is the
+    # published port for a browser on the host and resolves to nothing from in
+    # here. Getting this wrong yields a datasource that saves fine and fails
+    # every query.
+    url: http://prometheus:9090
+    isDefault: true
+    # Matches prometheus.yml's global scrape_interval. Grafana uses it to pick
+    # sensible default step sizes, so a mismatch produces graphs with visible
+    # gaps or needlessly smoothed lines.
+    jsonData:
+      timeInterval: 15s
+    editable: true

@@ -83,6 +83,7 @@ volumes:
   redis-data:
   kafka-data:
   grafana-data:
+  prometheus-data:
 
 services:
 
@@ -534,8 +535,36 @@ services:
     profiles: ["observability"]
     ports: ["9091:9090"]
     mem_limit: 256m
+    # NOTE the port asymmetry: 9091 on the host, 9090 in the container. Grafana
+    # reaches it as http://prometheus:9090 over easyshop-network; a browser uses
+    # localhost:9091. Wiring the datasource to 9091 is the usual mistake.
+    #
+    # THE COMMAND REPLACES the image's default CMD rather than adding to it, so
+    # all four original flags are repeated here. Dropping --config.file or
+    # --storage.tsdb.path would leave Prometheus running happily against its
+    # built-in defaults, scraping nothing - a failure that looks like a healthy
+    # container.
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      # Bounded on BOTH axes deliberately. Time alone does not bound disk: 15
+      # days of a fleet this size is small today, but every new service and
+      # every new label multiplies it, and the first sign of trouble would be
+      # this dev box running out of space. Whichever limit is reached first
+      # wins, so the size cap is the backstop for a cardinality mistake.
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=512MB
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      # WITHOUT THIS, /prometheus is container-local and every restart or
+      # `docker compose down` silently destroys all metric history - which is
+      # exactly what happened to the data collected while verifying the
+      # instrumentation ticket. Every other stateful service here already had a
+      # named volume; Prometheus was the one exception, and the symptom is not
+      # an error but graphs that simply start at "now" after each restart.
+      - prometheus-data:/prometheus
     networks: [easyshop-network]
 
   grafana:

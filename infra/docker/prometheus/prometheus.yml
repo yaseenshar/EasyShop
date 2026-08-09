@@ -18,6 +18,18 @@ global:
 # Note these are CONTAINER ports on easyshop-network, not the host-published
 # ones - api-gateway happens to be 8080 in both, the rest differ.
 scrape_configs:
+  # Prometheus scraping itself. Not vanity: this is the only source for
+  # scrape_duration_seconds, prometheus_target_scrapes_exceeded_sample_limit
+  # and TSDB health, which is how you find out that a target is being scraped
+  # slowly or dropping samples. Without it the monitoring system is the one
+  # component with no monitoring - and a silently failing scrape looks
+  # identical to a service that simply has nothing to report.
+  #
+  # Its own default metrics path is /metrics, not /actuator/prometheus.
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
   - job_name: 'service-discovery'
     metrics_path: '/actuator/prometheus'
     static_configs:
