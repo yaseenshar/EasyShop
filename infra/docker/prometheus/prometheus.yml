@@ -2,6 +2,21 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Every service that emits metrics is scraped here. Six of them
+# (catalog, cart, payment, inventory, review, notification) were missing
+# entirely: they had micrometer-registry-prometheus and a live
+# /actuator/prometheus endpoint, but nothing ever collected from them, so their
+# metrics existed only inside the process. Among the things that never reached
+# Prometheus were catalog-service's cache hit/miss counters, which exist purely
+# to answer "is the cache working" and had no way of being asked.
+#
+# Static targets rather than Eureka service discovery: Prometheus can discover
+# through Eureka, but that couples metric collection to the discovery server
+# being healthy - and discovery being down is exactly when the dashboards need
+# to keep working. One line per service is cheap at this fleet size.
+#
+# Note these are CONTAINER ports on easyshop-network, not the host-published
+# ones - api-gateway happens to be 8080 in both, the rest differ.
 scrape_configs:
   - job_name: 'service-discovery'
     metrics_path: '/actuator/prometheus'
@@ -22,3 +37,33 @@ scrape_configs:
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['order-service:8082']
+
+  - job_name: 'payment-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['payment-service:8083']
+
+  - job_name: 'inventory-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['inventory-service:8084']
+
+  - job_name: 'catalog-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['catalog-service:8085']
+
+  - job_name: 'review-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['review-service:8086']
+
+  - job_name: 'cart-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['cart-service:8087']
+
+  - job_name: 'notification-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['notification-service:8088']

@@ -1,6 +1,7 @@
 package com.easyshop.order.saga;
 
 import com.easyshop.common.event.OrderCreatedEvent;
+import com.easyshop.common.metrics.BusinessMetrics;
 import com.easyshop.common.event.OrderEvents;
 import com.easyshop.common.event.PaymentEvents.PaymentCompletedEvent;
 import com.easyshop.common.event.PaymentEvents.PaymentFailedEvent;
@@ -45,19 +46,25 @@ public class OrderSagaOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(OrderSagaOrchestrator.class);
 
+    /** One meter for every saga terminal state; the outcome tag distinguishes them. */
+    private static final String SAGA_OUTCOMES = "easyshop.orders.saga";
+
     private final OrderRepository orderRepository;
     private final OrderSagaRepository sagaRepository;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final BusinessMetrics businessMetrics;
 
     public OrderSagaOrchestrator(OrderRepository orderRepository,
                                  OrderSagaRepository sagaRepository,
                                  OutboxRepository outboxRepository,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 BusinessMetrics businessMetrics) {
         this.orderRepository = orderRepository;
         this.sagaRepository = sagaRepository;
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
+        this.businessMetrics = businessMetrics;
     }
 
     /**
@@ -161,7 +168,7 @@ public class OrderSagaOrchestrator {
             log.info("Stock reservation failed for order {}: {}", reply.orderId(), reply.failureReason());
             saga.advanceTo(OrderStatus.CANCELLED);
             order.transitionTo(OrderStatus.CANCELLED);
-            publishOrderCancelled(order, reply.failureReason());
+            publishOrderCancelled(order, reply.failureReason(), "stock_reservation");
             return;
         }
 
@@ -266,7 +273,7 @@ public class OrderSagaOrchestrator {
             saga.recordCompensation("RELEASE_STOCK");
             saga.advanceTo(OrderStatus.CANCELLED);
             order.transitionTo(OrderStatus.CANCELLED);
-            publishOrderCancelled(order, failureReason);
+            publishOrderCancelled(order, failureReason, "payment");
             return;
         }
 
@@ -367,7 +374,29 @@ public class OrderSagaOrchestrator {
         return true;
     }
 
+    /**
+     * SAGA OUTCOME METRICS are recorded in these three publish* methods rather
+     * than at their call sites: each is the single choke point for its outcome,
+     * so a future branch that cancels an order cannot forget to count it.
+     *
+     * ONE COUNTER, TAGGED BY OUTCOME - not three separate counters. It makes the
+     * question you actually ask a single query: the rollback RATE is
+     * cancelled/(completed+cancelled), which is one expression over one metric
+     * name instead of a join across three.
+     *
+     * THE FAILURE REASON IS NOT A TAG. reply.failureReason() is free text from
+     * a downstream service ("Card declined by issuer", and whatever a future
+     * gateway invents); as a tag value it would create an unbounded number of
+     * time series - the classic way to take Prometheus down with a metric. The
+     * bounded "stage" tag answers the question that actually drives action -
+     * WHERE the saga died - while the reason stays in the log line above, which
+     * is the right place for high-cardinality detail.
+     *
+     * These fire on afterCommit (see BusinessMetrics), so a saga step whose
+     * transaction rolls back does not report an outcome that never happened.
+     */
     private void publishOrderCreated(Order order) {
+        businessMetrics.increment(SAGA_OUTCOMES, "outcome", "started", "stage", "none");
         var items = order.getItems().stream()
                 .map(item -> new OrderCreatedEvent.OrderItem(
                         item.getProductId(), item.getQuantity(), item.getUnitPrice()))
@@ -382,13 +411,15 @@ public class OrderSagaOrchestrator {
     }
 
     private void publishOrderCompleted(Order order) {
+        businessMetrics.increment(SAGA_OUTCOMES, "outcome", "completed", "stage", "none");
         var event = new OrderEvents.OrderCompletedEvent(
                 order.getId(), order.getUserId(), order.getTotalAmount(), Instant.now());
         writeToOutbox("Order", order.getId(), "OrderCompletedEvent",
                 SagaTopics.ORDER_EVENTS, event);
     }
 
-    private void publishOrderCancelled(Order order, String reason) {
+    private void publishOrderCancelled(Order order, String reason, String stage) {
+        businessMetrics.increment(SAGA_OUTCOMES, "outcome", "cancelled", "stage", stage);
         var event = new OrderEvents.OrderCancelledEvent(
                 order.getId(), order.getUserId(), reason, Instant.now());
         writeToOutbox("Order", order.getId(), "OrderCancelledEvent",

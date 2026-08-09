@@ -46,6 +46,20 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**").permitAll()
+                        // Prometheus scrapes anonymously - it presents no JWT - so
+                        // without this the endpoint 401s and the service publishes
+                        // nothing, however well instrumented it is. Metrics only:
+                        // /actuator/env, /heapdump and friends stay behind
+                        // authentication via the catch-all below.
+                        //
+                        // EXPOSURE NOTE: this makes operational data (URI templates,
+                        // error counts, JVM internals, business counter values)
+                        // readable by anyone who can reach the port. Acceptable here
+                        // because these ports are only published for local dev; the
+                        // production posture is management.server.port on a separate
+                        // interface the internet cannot route to, scraped over the
+                        // internal network.
+                        .requestMatchers("/actuator/prometheus").permitAll()
 
                         // TODO: align patterns with your actual controllers before trusting this.
                         .requestMatchers("/api/v1/users/me", "/api/v1/users/me/**")

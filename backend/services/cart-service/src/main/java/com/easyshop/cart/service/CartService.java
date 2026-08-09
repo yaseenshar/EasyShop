@@ -5,10 +5,12 @@ import com.easyshop.cart.dto.CartDtos.CartItem;
 import com.easyshop.cart.dto.CartDtos.CartResponse;
 import com.easyshop.cart.repository.CartKey;
 import com.easyshop.cart.repository.CartRepository;
+import com.easyshop.common.metrics.BusinessMetrics;
 import com.easyshop.common.exception.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -34,10 +36,21 @@ public class CartService {
     /** Matches the @Max(99) bound on AddItemRequest/UpdateQuantityRequest. */
     private static final int MAX_QUANTITY = 99;
 
-    private final CartRepository cartRepository;
+    /**
+     * Guest-to-account cart conversions. Paired with easyshop.carts.guest.issued
+     * in GuestCartController, this is the anonymous-shopper conversion rate -
+     * and it is also the alert that catches merge-on-login quietly breaking,
+     * which otherwise shows up only as customers complaining that their basket
+     * emptied when they signed in.
+     */
+    private static final String GUEST_MERGES = "easyshop.carts.guest.merged";
 
-    public CartService(CartRepository cartRepository) {
+    private final CartRepository cartRepository;
+    private final BusinessMetrics businessMetrics;
+
+    public CartService(CartRepository cartRepository, BusinessMetrics businessMetrics) {
         this.cartRepository = cartRepository;
+        this.businessMetrics = businessMetrics;
     }
 
     public CartResponse getCart(CartKey cart) {
@@ -85,7 +98,15 @@ public class CartService {
      * operation a user performs at most once per login.
      */
     public CartResponse mergeGuestIntoSession(CartKey.Guest guest, CartKey.Session session) {
-        for (CartItem guestItem : cartRepository.findAll(guest)) {
+        // Tagged by whether the guest cart actually held anything: a client that
+        // calls merge on every login sends mostly empty ones, and counting those
+        // together with real conversions would make the conversion rate look
+        // healthy no matter what. This service has no transaction manager (see
+        // the class note), so BusinessMetrics increments immediately here.
+        List<CartItem> guestItems = cartRepository.findAll(guest);
+        businessMetrics.increment(GUEST_MERGES, "result", guestItems.isEmpty() ? "empty" : "items_merged");
+
+        for (CartItem guestItem : guestItems) {
             CartItem existing = cartRepository.find(session, guestItem.productId());
 
             // A brand-new product keeps the guest cart's addedAt, so the merged
