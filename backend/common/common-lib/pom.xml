@@ -49,6 +49,23 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- Structured JSON logging, shared deliberately rather than declared
+             per service. Log SHAPE is a contract with whatever ingests it: a
+             dashboard or alert written against a field name breaks the moment
+             one service spells it differently, and nine copies of a logback
+             config drift. NOT optional - the logback-spring.xml shipped
+             alongside it references these classes at runtime, so a consumer
+             that inherited the config without the encoder would fail to start
+             its logging subsystem.
+
+             8.1 pairs with the Logback 1.5.x Boot 4 brings; the version is
+             explicit because Spring Boot's BOM does not manage this artifact. -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>8.1</version>
+        </dependency>
+
         <!-- OTel API only (not the starter): BaseOutboxEvent captures the
              trace context from a JPA @PrePersist callback, which is not a Spring
              bean and cannot inject a Propagator. Span.current() is the static,

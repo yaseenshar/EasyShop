@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fleet-wide logging configuration, shipped from common-lib so every service
+  emits the SAME shape.
+
+  WHY THIS LIVES IN A LIBRARY. Log structure is a contract with whatever reads
+  the logs: a Loki query, a dashboard panel or an alert is written against field
+  names, and it breaks silently the moment one service spells traceId
+  differently or omits the service name. Nine copies of this file would drift;
+  one copy cannot. Boot picks up logback-spring.xml from anywhere on the
+  classpath, so consumers get it by depending on common-lib and nothing else.
+  A service that genuinely needs different logging can still override by placing
+  its own logback-spring.xml in its own resources, which wins over the jar.
+
+  NOTE service-discovery does NOT depend on common-lib, so it keeps Boot's
+  default plain-text console output. That is a real gap in coverage, called out
+  in the ticket write-up rather than papered over here.
+-->
+<configuration>
+
+    <!-- Boot's own defaults: console pattern, log levels, and the conversion
+         rules (%clr, %correlationId) the plain-text pattern below relies on. -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- spring.application.name becomes a first-class field so queries can say
+         {service="cart-service"} instead of guessing from the container name,
+         which changes with replica count and orchestrator. -->
+    <springProperty scope="context" name="serviceName" source="spring.application.name"
+                    defaultValue="unknown"/>
+
+    <appender name="CONSOLE_TEXT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- Field names chosen to match what log backends expect by
+                 default, so no rename rules are needed at ingest. -->
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</timestampPattern>
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+
+            <!-- THE POINT OF DOING THIS AT ALL: traceId and spanId arrive as
+                 real fields rather than being buried in the message text, so a
+                 log line found in Grafana links straight to its Jaeger trace.
+                 They come from the MDC, which Boot's tracing auto-configuration
+                 populates - verified by HttpTracePropagationIntegrationTest,
+                 which asserts the MDC actually carries them. includeMdc is on
+                 by default; it is stated explicitly because this is the field
+                 everything else in the observability stack hangs off. -->
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+
+            <customFields>{"service":"${serviceName}"}</customFields>
+
+            <!-- Logback CONTEXT properties are excluded, otherwise the
+                 springProperty above is emitted as a second field
+                 (serviceName) carrying the identical value to "service".
+                 Verified against a running container, where every line arrived
+                 with both. Two fields meaning one thing is worse than none: a
+                 query picks one, a dashboard picks the other, and they disagree
+                 the moment somebody changes only one of them. -->
+            <includeContext>false</includeContext>
+
+            <!-- Stack traces as ONE field rather than many lines: a multi-line
+                 exception is otherwise ingested as N unrelated log entries, and
+                 the one line naming the actual cause ends up orphaned from the
+                 request that produced it. Truncated because a deep reactive or
+                 Hibernate trace can run to thousands of frames and a single log
+                 line is not the right place to store all of them. -->
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerThrowable>40</maxDepthPerThrowable>
+                <maxLength>8192</maxLength>
+                <rootCauseFirst>true</rootCauseFirst>
+                <!-- Framework frames crowd out the application ones that
+                     actually locate the bug. -->
+                <exclude>^sun\.reflect\..*\.invoke</exclude>
+                <exclude>^net\.sf\.cglib\.proxy\.MethodProxy\.invoke</exclude>
+                <exclude>^org\.springframework\.aop\..*</exclude>
+                <exclude>^org\.apache\.catalina\..*</exclude>
+            </throwableConverter>
+        </encoder>
+    </appender>
+
+    <!--
+      JSON IS OPT-IN, selected by the "json-logging" Spring profile.
+
+      Boot's <springProfile> is used rather than a boolean property because
+      Logback's own <if> requires Janino on the classpath - an extra dependency
+      on every service to choose between two appenders. This needs nothing
+      extra and is the mechanism Boot documents for exactly this.
+
+      Default is PLAIN TEXT on purpose. Running locally, JSON logs are close to
+      unreadable and a stack trace collapses into one enormous line; developers
+      then stop reading logs at all, which is worse than having them
+      unstructured. Containers activate the profile (see SPRING_PROFILES_ACTIVE
+      in docker-compose.yml's shared env anchor), where nothing human reads
+      stdout directly and a shipper consumes it.
+    -->
+    <springProfile name="json-logging">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!json-logging">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_TEXT"/>
+        </root>
+    </springProfile>
+
+</configuration>
