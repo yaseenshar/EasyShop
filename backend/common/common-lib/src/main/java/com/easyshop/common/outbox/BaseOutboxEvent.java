@@ -54,6 +54,25 @@ public abstract class BaseOutboxEvent {
     @Column(name = "published_at")
     protected Instant publishedAt;
 
+    /**
+     * The W3C traceparent of the request that CAUSED this event, carried so the
+     * eventual publish can rejoin that trace.
+     *
+     * WHY THE OUTBOX NEEDS THIS AT ALL. Trace context lives in a thread-local
+     * scope. The outbox deliberately severs the causal chain from the thread
+     * that created the event - the request writes a row and returns, and a
+     * scheduled publisher picks it up later on a different thread, often
+     * seconds afterwards. Nothing survives that handoff except what is written
+     * to the row. Measured before this column existed: 38 of 38 publisher spans
+     * were trace ROOTS, so a checkout appeared in Jaeger as a chain of
+     * disconnected traces rather than one story.
+     *
+     * Exactly 55 characters by spec: "00-" + 32 hex trace id + "-" + 16 hex
+     * span id + "-" + 2 hex flags.
+     */
+    @Column(name = "trace_parent", length = 55)
+    protected String traceParent;
+
     protected BaseOutboxEvent() {}
 
     protected void initialize(String aggregateType, UUID aggregateId, String eventType,
@@ -73,5 +92,17 @@ public abstract class BaseOutboxEvent {
     @PrePersist
     protected void onCreate() {
         this.createdAt = Instant.now();
+        // Captured HERE rather than passed in by each caller: @PrePersist runs
+        // on the thread that is writing the row, which is by definition still
+        // inside the originating request's trace scope. Threading a traceparent
+        // through every writeToOutbox() signature in three services would work
+        // too, but it is a parameter that exists only to be forwarded and that
+        // a new call site can silently forget.
+        //
+        // OpenTelemetry's Span.current() is a static API by design - it reads
+        // the active context and returns an invalid span when there is none, so
+        // this is safe on an untraced thread (a scheduled job, a test) and
+        // simply stores null.
+        this.traceParent = TraceContextCodec.currentTraceParent();
     }
 }

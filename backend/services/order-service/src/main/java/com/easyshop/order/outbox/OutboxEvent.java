@@ -1,5 +1,6 @@
 package com.easyshop.order.outbox;
 
+import com.easyshop.common.outbox.TraceContextCodec;
 import jakarta.persistence.*;
 import lombok.Getter;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -59,6 +60,24 @@ public class OutboxEvent {
         return event;
     }
 
+    /**
+     * W3C traceparent of the request that produced this event - see
+     * TraceContextCodec and common-lib's BaseOutboxEvent for the reasoning.
+     *
+     * NOTE this class does NOT extend BaseOutboxEvent, unlike payment-service's
+     * and inventory-service's equivalents, so it carries its own copy of this
+     * field and its own capture in @PrePersist. That divergence is exactly why
+     * the first attempt at this change worked in payment and inventory and
+     * silently did nothing here. Folding this entity onto the shared base would
+     * remove the trap and is worth its own ticket.
+     */
+    @Column(name = "trace_parent", length = 55)
+    private String traceParent;
+
+    public String getTraceParent() {
+        return traceParent;
+    }
+
     public void markPublished() {
         this.published = true;
         this.publishedAt = Instant.now();
@@ -67,5 +86,6 @@ public class OutboxEvent {
     @PrePersist
     protected void onCreate() {
         this.createdAt = Instant.now();
+        this.traceParent = TraceContextCodec.currentTraceParent();
     }
 }

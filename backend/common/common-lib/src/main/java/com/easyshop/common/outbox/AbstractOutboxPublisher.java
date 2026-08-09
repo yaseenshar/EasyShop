@@ -1,5 +1,7 @@
 package com.easyshop.common.outbox;
 
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -37,8 +39,7 @@ public abstract class AbstractOutboxPublisher<T extends BaseOutboxEvent> {
 
         for (T event : batch) {
             try {
-                kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(),
-                        event.getPayload()).get();
+                publishWithinOriginatingTrace(event);
                 event.markPublished();
                 log.info("Published outbox event {} of type {} to topic {}",
                         event.getId(), event.getEventType(), event.getTopic());
@@ -46,6 +47,37 @@ public abstract class AbstractOutboxPublisher<T extends BaseOutboxEvent> {
                 log.error("Failed to publish outbox event {}, will retry next cycle",
                         event.getId(), e);
             }
+        }
+    }
+
+    /**
+     * Sends the record inside the trace context captured when the row was
+     * written, so the Kafka producer span becomes a child of the ORIGINATING
+     * request rather than of this polling task.
+     *
+     * The scope is what does the work, not any header manipulation: Spring
+     * Kafka's producer observation reads the CURRENT context to decide its
+     * parent and to inject the outgoing traceparent. Making the restored
+     * context current for the duration of send() is therefore enough to graft
+     * the whole downstream chain - producer span, consumer span, and everything
+     * the consumer does - back onto the original trace. Writing the traceparent
+     * header by hand instead would be overwritten by that same instrumentation.
+     *
+     * WHEN THERE IS NO STORED CONTEXT the send happens normally and simply
+     * roots its own trace. That is the correct outcome for a row written before
+     * this column existed, or by an untraced path - a slightly less connected
+     * trace is much better than dropping the event.
+     */
+    private void publishWithinOriginatingTrace(T event) throws Exception {
+        Context originating = TraceContextCodec.restore(event.getTraceParent());
+        if (originating == null) {
+            kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(),
+                    event.getPayload()).get();
+            return;
+        }
+        try (Scope ignored = originating.makeCurrent()) {
+            kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(),
+                    event.getPayload()).get();
         }
     }
 }

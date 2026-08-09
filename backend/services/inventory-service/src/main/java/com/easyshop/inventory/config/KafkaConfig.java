@@ -51,7 +51,19 @@ public class KafkaConfig {
 
     @Bean
     public KafkaTemplate<String, String> kafkaTemplate(ProducerFactory<String, String> producerFactory) {
-        return new KafkaTemplate<>(producerFactory);
+        KafkaTemplate<String, String> template = new KafkaTemplate<>(producerFactory);
+        // OBSERVATION MUST BE SET ON THE BEAN, NOT IN application.yml.
+        // spring.kafka.template.observation-enabled only configures Boot's
+        // AUTO-CONFIGURED template, and this hand-built bean replaces it - the
+        // same trap the ack-mode comment on the listener factory below records.
+        // The property binds without error and does nothing, which is why the
+        // saga ran end to end while producing no Kafka spans at all.
+        //
+        // This is what injects the W3C traceparent header into every record, so
+        // the consumer on the other side can continue the trace instead of
+        // starting a fresh one.
+        template.setObservationEnabled(true);
+        return template;
     }
 
     @Bean
@@ -79,6 +91,11 @@ public class KafkaConfig {
         // it has to be set here instead. Listeners take an Acknowledgment
         // param and need MANUAL_IMMEDIATE or Spring throws IllegalStateException.
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        // Consumer side of the same story: reads the traceparent off the record
+        // and continues the producer's trace. Both halves are required - with
+        // only the producer set, spans are emitted but every consumer still
+        // roots its own disconnected trace.
+        factory.getContainerProperties().setObservationEnabled(true);
 
         return factory;
     }
