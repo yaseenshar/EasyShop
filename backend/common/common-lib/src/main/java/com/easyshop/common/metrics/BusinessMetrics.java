@@ -42,6 +42,27 @@ public class BusinessMetrics {
     }
 
     /**
+     * Creates a counter at zero without incrementing it, so the time series
+     * exists before the thing it counts has ever happened.
+     *
+     * WHY THIS IS WORTH DOING. A Micrometer counter is registered lazily, on
+     * first increment - so on a freshly deployed fleet the query for "failed
+     * payments" returns nothing at all, and a dashboard panel renders "No
+     * data". That is indistinguishable from a broken query, a renamed metric or
+     * a dead scrape target, and it is indistinguishable at exactly the moment
+     * you least want ambiguity: during an incident, when what you need to know
+     * is whether the number is zero or whether you are flying blind.
+     *
+     * Call it for the KNOWN, BOUNDED set of tag combinations only. Pre-creating
+     * open-ended combinations would populate the registry with series nothing
+     * will ever write to, which is the cardinality problem in a different
+     * costume.
+     */
+    public void preRegister(String name, String... tags) {
+        registry.counter(name, Tags.of(tags));
+    }
+
+    /**
      * Increments a counter, deferring until commit when a transaction is active.
      *
      * @param name dot-separated meter name, e.g. "easyshop.orders.saga"

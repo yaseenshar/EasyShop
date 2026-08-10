@@ -1,0 +1,26 @@
+# Dashboard provisioning.
+#
+# Without a provider file, the mounted dashboards directory is just a folder
+# Grafana never looks at - which is the state this was in: the volume mount
+# existed in docker-compose.yml and nothing was ever loaded from it.
+apiVersion: 1
+
+providers:
+  - name: easyshop
+    orgId: 1
+    folder: EasyShop
+    type: file
+    # Dashboards are code here, not clicked-together artifacts. allowUiUpdates
+    # is false so a change made in the browser cannot silently diverge from the
+    # JSON in git - the edit is lost on the next restart, which is confusing,
+    # but far less confusing than a dashboard nobody can reproduce.
+    allowUiUpdates: false
+    # A dashboard deleted from git disappears from Grafana, rather than
+    # lingering as an orphan whose source no longer exists.
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      # Keeps the on-disk layout as the folder structure, so adding a
+      # subdirectory later organises rather than flattens.
+      foldersFromFilesStructure: false

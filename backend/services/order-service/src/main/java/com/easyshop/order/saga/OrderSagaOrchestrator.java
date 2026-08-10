@@ -65,6 +65,16 @@ public class OrderSagaOrchestrator {
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
         this.businessMetrics = businessMetrics;
+
+        // Every saga outcome exists as a zero series from startup, so the
+        // dashboard shows "0 cancelled" rather than "No data" before the first
+        // checkout - see BusinessMetrics.preRegister for why that distinction
+        // matters more than it looks. The set is exhaustive and bounded: the
+        // three outcomes, and the two stages a saga can die at.
+        businessMetrics.preRegister(SAGA_OUTCOMES, "outcome", "started", "stage", "none");
+        businessMetrics.preRegister(SAGA_OUTCOMES, "outcome", "completed", "stage", "none");
+        businessMetrics.preRegister(SAGA_OUTCOMES, "outcome", "cancelled", "stage", "stock_reservation");
+        businessMetrics.preRegister(SAGA_OUTCOMES, "outcome", "cancelled", "stage", "payment");
     }
 
     /**

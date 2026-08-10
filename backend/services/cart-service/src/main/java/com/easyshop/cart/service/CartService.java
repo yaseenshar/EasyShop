@@ -51,6 +51,11 @@ public class CartService {
     public CartService(CartRepository cartRepository, BusinessMetrics businessMetrics) {
         this.cartRepository = cartRepository;
         this.businessMetrics = businessMetrics;
+
+        // Both merge results from startup, so the guest-conversion panel has a
+        // denominator before the first login rather than reading "No data".
+        businessMetrics.preRegister(GUEST_MERGES, "result", "items_merged");
+        businessMetrics.preRegister(GUEST_MERGES, "result", "empty");
     }
 
     public CartResponse getCart(CartKey cart) {

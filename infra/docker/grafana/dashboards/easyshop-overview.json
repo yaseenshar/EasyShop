@@ -1,0 +1,332 @@
+{
+  "uid": "easyshop-overview",
+  "title": "EasyShop — Fleet Overview",
+  "description": "Primary dashboard. Top row answers 'is the fleet healthy right now'; the rest answers 'and is the business working'. Every panel queries metrics that are asserted by tests, so a panel showing No data means something is genuinely wrong rather than the query being stale.",
+  "tags": ["easyshop", "overview"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "links": [
+    {
+      "title": "Logs (Loki)",
+      "type": "link",
+      "icon": "doc",
+      "url": "/explore?left=%7B%22datasource%22:%22loki%22%7D",
+      "targetBlank": true
+    },
+    {
+      "title": "Traces (Jaeger)",
+      "type": "link",
+      "icon": "cloud",
+      "url": "http://localhost:16686",
+      "targetBlank": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(http_server_requests_seconds_count, application)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Fleet health",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Scrape targets up",
+      "description": "Prometheus targets currently responding, out of the total configured. Below full count means a service is down or its /actuator/prometheus is unreachable — both of which make every other panel here quietly incomplete.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 1 },
+      "targets": [
+        { "refId": "A", "expr": "sum(up)", "legendFormat": "up" },
+        { "refId": "B", "expr": "count(up)", "legendFormat": "configured" }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by service",
+      "description": "Requests per second, from http_server_requests_seconds_count. A service dropping to zero here while still 'up' usually means traffic is being lost upstream at the gateway rather than the service failing.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 10, "x": 4, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\"$service\"}[5m]))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 8, "showPoints": "never" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Server errors (5xx) by service",
+      "description": "outcome=SERVER_ERROR only — deliberately NOT 4xx. A client sending a malformed request is not an incident; 4xx on this panel would keep it permanently amber and train people to ignore it.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 10, "x": 14, "y": 1 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{application=~\"$service\", outcome=\"SERVER_ERROR\"}[5m]))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "fillOpacity": 15, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p95 / p99 by service",
+      "description": "Computed from the SLO histogram buckets configured fleet-wide in common-lib (50ms…5s). Quantiles are derived from bucket counts, which aggregate correctly across replicas — a per-instance pre-computed percentile could not be summed like this.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\"$service\"}[5m])))",
+          "legendFormat": "p95 {{application}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (application, le) (rate(http_server_requests_seconds_bucket{application=~\"$service\"}[5m])))",
+          "legendFormat": "p99 {{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 0, "showPoints": "never" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table",
+      "title": "Slowest endpoints (p95)",
+      "description": "Templated URIs, never raw paths — the uri label carries /api/v1/products/{productId}, which is what keeps this table bounded instead of growing a row per product id.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "instant": true,
+          "expr": "topk(10, histogram_quantile(0.95, sum by (application, uri, method, le) (rate(http_server_requests_seconds_bucket{application=~\"$service\"}[5m]))))",
+          "legendFormat": ""
+        }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true } } }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Business outcomes",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Checkout saga outcomes",
+      "description": "The distributed transaction's terminal states. 'cancelled' is tagged by the stage it died at (stock_reservation or payment) — the reason string is deliberately not a label, as it is free text from a downstream service and would be unbounded.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 15 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome, stage) (rate(easyshop_orders_saga_total[5m]))",
+          "legendFormat": "{{outcome}} {{stage}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Saga rollback rate",
+      "description": "cancelled / (completed + cancelled) over the window. clamp_min guards the denominator: with no checkouts at all this reads 0 rather than NaN, which would otherwise render as an alarming blank during quiet periods.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 4, "x": 8, "y": 15 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(easyshop_orders_saga_total{outcome=\"cancelled\"}[30m])) / clamp_min(sum(rate(easyshop_orders_saga_total{outcome=~\"completed|cancelled\"}[30m])), 0.0000001)",
+          "legendFormat": "rollback rate"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.2 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Payment charge outcomes",
+      "description": "Counted where the gateway's actual answer is known, so a decline is distinguishable from a duplicate Kafka redelivery. A rising 'declined' line with flat 'succeeded' is a payment-provider problem, not an application one.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 15 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(easyshop_payments_charges_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "fillOpacity": 10, "showPoints": "never" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Guest cart conversion",
+      "description": "Guest carts that merged WITH items, over guest carts issued. Merges of empty carts are excluded — a client that calls merge on every login would otherwise make this look healthy regardless of whether anyone converted.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 15 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(easyshop_carts_guest_merged_total{result=\"items_merged\"}) / clamp_min(sum(easyshop_carts_guest_issued_total), 1)",
+          "legendFormat": "converted"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Caches and resources",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hit ratio",
+      "description": "hits / (hits + misses) per cache. These are the counters enabled by collectStatistics() in catalog-service's CacheConfig — they existed for a long time before anything collected them, which is why this panel is here rather than assumed.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 23 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cache) (rate(cache_gets_total{result=\"hit\"}[5m])) / clamp_min(sum by (cache) (rate(cache_gets_total{result=~\"hit|miss\"}[5m])), 0.0000001)",
+          "legendFormat": "{{cache}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "fillOpacity": 5, "showPoints": "never" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM heap used by service",
+      "description": "Heap only (area=heap). Container mem_limits in this compose file are tight, and a service approaching its limit shows here before the kernel OOM-kills it and leaves nothing behind to look at.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 23 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (jvm_memory_used_bytes{application=~\"$service\", area=\"heap\"})",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "custom": { "fillOpacity": 8, "showPoints": "never" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Recent errors (all services)",
+      "description": "ERROR-level lines straight from Loki. Each carries traceId as a field, so the Loki datasource's derived-field link jumps from any line here to that exact trace in Jaeger — metrics tell you something is wrong, this tells you what, and the trace tells you where.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 23 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{level=\"ERROR\"}",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    }
+  ]
+}

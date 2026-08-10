@@ -10,6 +10,10 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    # Pinned so the provisioned dashboard can reference it deterministically.
+    # An auto-generated uid differs per environment, and a dashboard carrying
+    # the wrong one renders every panel as "Datasource not found".
+    uid: prometheus
     access: proxy
     # CONTAINER address, not the host one. Grafana queries Prometheus from
     # inside easyshop-network, where it listens on 9090; localhost:9091 is the
