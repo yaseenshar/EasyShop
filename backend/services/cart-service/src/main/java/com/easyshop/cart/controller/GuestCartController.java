@@ -64,6 +64,9 @@ public class GuestCartController {
     public GuestCartController(CartService cartService, BusinessMetrics businessMetrics) {
         this.cartService = cartService;
         this.businessMetrics = businessMetrics;
+        // No tags on this one - a single series, registered at zero so the
+        // conversion-rate panel is not dividing by a metric that does not exist.
+        businessMetrics.preRegister(GUEST_CARTS_ISSUED);
     }
 
     /**

@@ -57,6 +57,12 @@ public class PaymentChargeAndRefundTxn {
         this.outboxRepository = outboxRepository;
         this.objectMapper = objectMapper;
         this.businessMetrics = businessMetrics;
+
+        // Both charge outcomes exist from startup so a payment-failure panel
+        // reads 0 rather than "No data" - the difference between "no charge has
+        // failed" and "I cannot tell whether one has".
+        businessMetrics.preRegister(PAYMENT_CHARGES, "outcome", "succeeded");
+        businessMetrics.preRegister(PAYMENT_CHARGES, "outcome", "declined");
     }
 
     @Transactional

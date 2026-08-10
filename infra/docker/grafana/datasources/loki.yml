@@ -6,6 +6,7 @@ apiVersion: 1
 datasources:
   - name: Loki
     type: loki
+    uid: loki
     access: proxy
     # Container address on easyshop-network. The host publishes 3100 too, but
     # Grafana queries from inside the network - the same trap as the Prometheus
