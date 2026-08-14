@@ -169,3 +169,119 @@ jobs:
       # launcher or CI configuration - wiring that is its own piece of work, and
       # a test step that hangs a runner for 15 minutes teaches people to ignore
       # CI. Building at least catches a frontend that no longer compiles.
+
+  publish-images:
+    name: Build & push container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only after both build jobs are green. Publishing an image whose tests
+    # failed puts a known-bad artifact in a registry where something else may
+    # pull it, and the tag says nothing about that.
+    needs: [backend, frontend]
+    # Default branch pushes only. Pull requests are excluded on purpose: a PR
+    # from a fork cannot read secrets (so the job could only fail), and images
+    # built from unreviewed branches do not belong in a shared namespace.
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      # Namespace defaults to the account name, which is how Docker Hub works
+      # for a personal account; set the variable to publish under an org.
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Note when publishing was skipped
+        if: env.DOCKERHUB_TOKEN == ''
+        run: |
+          echo "::notice title=Image publish skipped::DOCKERHUB_TOKEN is not set." \
+            "Add DOCKERHUB_USERNAME and DOCKERHUB_TOKEN under Settings > Secrets" \
+            "and variables > Actions (a Docker Hub access token, not your" \
+            "password), and this job publishes automatically."
+
+      - name: Set up JDK 21
+        if: env.DOCKERHUB_TOKEN != ''
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build modules
+        if: env.DOCKERHUB_TOKEN != ''
+        working-directory: backend
+        # install, not package: the next step excludes common-lib from the
+        # reactor, so the services resolve it from the local repository. With
+        # only `package` it would not be there and every service would fail to
+        # resolve com.easyshop:common-lib.
+        run: mvn -B -ntp -DskipTests install
+
+      - name: Build & push service images (Jib)
+        if: env.DOCKERHUB_TOKEN != ''
+        working-directory: backend
+        # Jib builds straight from the compiled classes - no Docker daemon, no
+        # second Maven build inside a Dockerfile. That is the whole reason this
+        # job takes minutes instead of the ~40+ that ten Dockerfile builds
+        # would, since each of those re-runs the reactor internally.
+        #
+        # -pl '!common/common-lib' selects exactly the right set without naming
+        # ten modules: the aggregator pom skips itself ("Skipping
+        # containerization because packaging is 'pom'"), common-lib is excluded
+        # because it is a library with no main class and Jib errors on it, and
+        # a service added later is picked up with no edit here.
+        #
+        # Tags: the pom supplies :${project.version}; the SHA tag is the
+        # immutable one worth deploying, and :latest is the convenience alias.
+        # A version tag alone would be mutable and untraceable back to a commit.
+        run: |
+          mvn -B -ntp com.google.cloud.tools:jib-maven-plugin:build \
+            -pl '!common/common-lib' \
+            -Djib.registry=docker.io \
+            -Djib.namespace="$DOCKERHUB_NAMESPACE" \
+            -Djib.to.tags=latest,${{ github.sha }}
+
+      - name: Set up Buildx
+        if: env.DOCKERHUB_TOKEN != ''
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push frontend image
+        if: env.DOCKERHUB_TOKEN != ''
+        # The frontend is nginx serving static files, so Jib does not apply -
+        # it containerises JVM applications. This one keeps its Dockerfile,
+        # with buildx layer caching so an unchanged frontend is close to free.
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            docker.io/${{ env.DOCKERHUB_NAMESPACE }}/easyshop-frontend:latest
+            docker.io/${{ env.DOCKERHUB_NAMESPACE }}/easyshop-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summarise published images
+        if: env.DOCKERHUB_TOKEN != ''
+        # Puts the exact pullable references in the run summary, so nobody has
+        # to reconstruct the tag from the commit to find what was published.
+        run: |
+          {
+            echo "### Published images"
+            echo ""
+            echo "Namespace: \`$DOCKERHUB_NAMESPACE\` · immutable tag: \`${{ github.sha }}\`"
+            echo ""
+            echo '```'
+            echo "docker pull $DOCKERHUB_NAMESPACE/easyshop-cart-service:${{ github.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

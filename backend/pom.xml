@@ -53,6 +53,14 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <testcontainers.version>1.21.4</testcontainers.version>
+
+        <!-- Container image coordinates, overridden by CI (-Djib.namespace=...).
+             The default namespace is a placeholder that does not exist on
+             Docker Hub, so a stray `mvn jib:build` fails to authenticate rather
+             than publishing somewhere unintended. Local image builds should use
+             jib:dockerBuild, which ignores the registry entirely. -->
+        <jib.registry>docker.io</jib.registry>
+        <jib.namespace>easyshop-local</jib.namespace>
     </properties>
 
     <!-- dependencyManagement = declare versions here, consume in children without versions -->
@@ -169,12 +177,42 @@
                     <version>3.4.4</version>
                     <configuration>
                         <from>
-                            <!-- Distroless Java 25 base image -->
+                            <!-- Distroless: a JRE and nothing else - no shell,
+                                 no package manager, no busybox. Smaller attack
+                                 surface, and notably smaller than the
+                                 eclipse-temurin base the Dockerfiles use.
+                                 (Comment previously said Java 25; the image is
+                                 and should stay java21, matching the project's
+                                 maven.compiler.release.)
+
+                                 Pulled from gcr.io, which is free and needs no
+                                 Google account - only the PUSH target is
+                                 Docker Hub. -->
                             <image>gcr.io/distroless/java21-debian12</image>
                         </from>
                         <to>
-                            <image>gcr.io/easyshop/${project.artifactId}:${project.version}</image>
+                            <!-- Parameterised so CI can point this at a real
+                                 namespace without editing the pom. Defaults are
+                                 deliberately local-only placeholders: pushing
+                                 requires -Djib.to.image or these properties, so
+                                 nobody accidentally publishes to a stranger's
+                                 Docker Hub namespace by running jib:build.
+
+                                 Image names are prefixed (easyshop-cart-service
+                                 rather than cart-service) because Docker Hub is
+                                 a flat namespace per account - unprefixed names
+                                 would collide with anything else you publish. -->
+                            <image>${jib.registry}/${jib.namespace}/easyshop-${project.artifactId}:${project.version}</image>
                         </to>
+                        <container>
+                            <!-- Reproducible builds default Jib's timestamp to
+                                 the Unix epoch, which makes every image look 55
+                                 years old in `docker images`. USE_CURRENT_TIMESTAMP
+                                 trades bit-for-bit reproducibility for a
+                                 creation date a human can read when deciding
+                                 which image is actually deployed. -->
+                            <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
+                        </container>
                     </configuration>
                 </plugin>
                 <!-- Surefire for unit tests -->
