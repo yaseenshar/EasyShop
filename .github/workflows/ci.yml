@@ -1,0 +1,162 @@
+# Build, test and static analysis for EasyShop.
+#
+# Runs on GitHub-hosted ubuntu runners, which ship a working Docker daemon -
+# that is not incidental. A large share of this repo's tests are Testcontainers
+# integration tests against real Redis, Postgres, MySQL and Kafka, and they are
+# the tests that carry the weight: the caching, tracing and session work was
+# repeatedly proved wrong by behaviour no mock reproduces. A runner without
+# Docker would still go green while skipping everything that matters.
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  # Lets a run be triggered by hand, which is how you verify a fix to the
+  # pipeline itself without pushing an empty commit.
+  workflow_dispatch:
+
+# A second push to the same branch cancels the first. Without this, a busy
+# branch queues runs that are already answering an out-of-date question, and on
+# a suite this long the queue is what makes CI feel slow.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege by default. Nothing here writes to the repository; a job that
+# later needs to (publishing an image, commenting on a PR) should widen this at
+# the job level rather than here.
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend build, test & analysis
+    runs-on: ubuntu-latest
+    # The full suite spins up a dozen containers across modules. 45 minutes is
+    # generous against the ~10 minutes it takes locally, because a cold runner
+    # also pulls every image; the point of the limit is to kill a hung job, not
+    # to police the runtime.
+    timeout-minutes: 45
+
+    env:
+      # Read once into the environment so the conditional below can see them.
+      # Secrets are NOT directly readable in a step-level `if:` expression, and
+      # a condition written against secrets.* silently evaluates to empty -
+      # which would skip Sonar forever without ever saying so.
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          # Sonar attributes issues to authors and distinguishes new code from
+          # old using git history; a shallow clone leaves it unable to do either
+          # and it warns rather than fails, so the analysis quietly degrades.
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          # Caches ~/.m2 keyed on the pom files. The first run is slow; every
+          # run after that skips re-downloading the Spring Boot dependency tree,
+          # which is the single largest fixed cost in this build.
+          cache: maven
+
+      - name: Validate the Maven reactor
+        working-directory: backend
+        # Fails in seconds if the module list is broken - notably if
+        # infrastructure/config-server is ever uncommented in backend/pom.xml,
+        # since that directory is untracked and does not exist in a clean
+        # checkout. Without this the same failure surfaces 20 minutes later,
+        # after the test suite has burned a runner.
+        run: mvn -B -ntp validate
+
+      - name: Compile
+        working-directory: backend
+        # Compiling before testing splits "the code does not build" from "the
+        # code builds but misbehaves". They have different owners and different
+        # fixes, and a single combined step reports both as one red X.
+        run: mvn -B -ntp -DskipTests package
+
+      - name: Test with coverage
+        working-directory: backend
+        # verify, not test: JaCoCo's report is bound to the verify phase, and
+        # Sonar reads that XML. Running only `test` produces green tests and an
+        # analysis claiming zero coverage.
+        run: mvn -B -ntp verify
+
+      - name: Upload test reports
+        # always(): the reports are most wanted when the step before failed.
+        # A conditionless upload step is skipped on failure, which is precisely
+        # backwards.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: |
+            backend/**/target/surefire-reports/**
+            backend/**/target/site/jacoco/**
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: SonarQube analysis
+        # Skipped cleanly when no token is configured, so the pipeline is green
+        # and useful from the first push and Sonar switches itself on the moment
+        # the secret exists. The alternative - a hard-coded project key - fails
+        # confusingly for whoever runs it first.
+        if: env.SONAR_TOKEN != ''
+        working-directory: backend
+        run: |
+          mvn -B -ntp org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar \
+            ${SONAR_HOST_URL:+-Dsonar.host.url="$SONAR_HOST_URL"} \
+            ${SONAR_PROJECT_KEY:+-Dsonar.projectKey="$SONAR_PROJECT_KEY"} \
+            ${SONAR_ORGANIZATION:+-Dsonar.organization="$SONAR_ORGANIZATION"}
+
+      - name: Note when analysis was skipped
+        # Silence is the enemy here: a skipped step looks identical to a step
+        # that ran and found nothing. This says which it was, in the log.
+        if: env.SONAR_TOKEN == ''
+        run: |
+          echo "::notice title=SonarQube skipped::SONAR_TOKEN is not set." \
+            "Add it under Settings > Secrets and variables > Actions, plus the" \
+            "SONAR_HOST_URL / SONAR_PROJECT_KEY (and SONAR_ORGANIZATION for" \
+            "SonarCloud) variables, and this step activates automatically."
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        # `npm ci`, never `npm install`: ci installs exactly the lockfile and
+        # fails if package.json and the lock disagree. install would quietly
+        # resolve newer versions, so CI would be testing a dependency set that
+        # exists nowhere else.
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      # Angular unit tests are deliberately NOT run yet. `ng test` defaults to
+      # watch mode with a real Chrome, and this project has no ChromeHeadless
+      # launcher or CI configuration - wiring that is its own piece of work, and
+      # a test step that hangs a runner for 15 minutes teaches people to ignore
+      # CI. Building at least catches a frontend that no longer compiles.
