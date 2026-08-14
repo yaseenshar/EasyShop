@@ -12,7 +12,18 @@
     <modules>
         <module>infrastructure/service-discovery</module>
         <module>infrastructure/api-gateway</module>
-        <module>infrastructure/config-server</module>
+        <!-- DISABLED, and it must stay that way while the directory is
+             untracked. infrastructure/config-server is not in git, so a fresh
+             clone - CI, or any other machine - has no such directory and Maven
+             refuses to build the reactor at all: "Child module ... does not
+             exist". It also fails `docker compose build`, because no service
+             Dockerfile copies this module's pom.
+
+             To re-enable it, the module has to be committed AND added to the
+             COPY list in every service Dockerfile, and its scratch classes
+             (basic/*, easy/*) either removed or given a single main class, or
+             spring-boot-maven-plugin:repackage cannot choose an entry point. -->
+        <!-- <module>infrastructure/config-server</module> -->
         <module>common/common-lib</module>
         <module>services/user-service</module>
         <module>services/catalog-service</module>
@@ -188,5 +199,46 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+
+        <!-- Plugins that actually RUN in every module, as opposed to the
+             pluginManagement block above which only pins versions. -->
+        <plugins>
+            <!-- JaCoCo coverage.
+                 SonarQube's analysis is largely decorative without it: static
+                 rules still fire, but every coverage metric and any
+                 coverage-based quality gate reads zero, which looks like the
+                 project has no tests rather than like coverage was never
+                 measured.
+
+                 prepare-agent sets the argLine surefire passes to the JVM.
+                 Nothing here overrides argLine (checked - the surefire
+                 declaration above sets only a version), so the agent is not
+                 silently dropped, which is the usual way this ends up
+                 reporting 0%.
+
+                 The report is bound to VERIFY rather than test, so `mvn test`
+                 stays as fast as it is today and only the CI job that asks for
+                 verification pays for report generation. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.13</version>
+                <executions>
+                    <execution>
+                        <id>jacoco-prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>jacoco-report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 </project>

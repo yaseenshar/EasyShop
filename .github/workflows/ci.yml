@@ -139,7 +139,16 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Angular 22's CLI refuses to run below v22.22.3 (or 24.15.0 / 26.0.0)
+          # and exits 3 with that message. '22' resolves to the latest 22.x,
+          # which clears that floor, and matches the Angular major in
+          # package.json.
+          #
+          # This was originally pinned to 20 and failed on the first CI run: the
+          # local rehearsal happened to use Node 26, so it proved the build works
+          # on the developer's machine and nothing about the runner. Pinning a
+          # toolchain version means the rehearsal has to pin the same one.
+          node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
