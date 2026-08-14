@@ -178,11 +178,20 @@ jobs:
     # failed puts a known-bad artifact in a registry where something else may
     # pull it, and the tag says nothing about that.
     needs: [backend, frontend]
-    # Default branch pushes only. Pull requests are excluded on purpose: a PR
-    # from a fork cannot read secrets (so the job could only fail), and images
-    # built from unreviewed branches do not belong in a shared namespace.
+    # Default branch only, on a push OR a manual run.
+    #
+    # Pull requests are excluded on purpose: a PR from a fork cannot read
+    # secrets, so the job could only ever fail, and images built from
+    # unreviewed branches do not belong in a shared namespace.
+    #
+    # workflow_dispatch is included because the first version was push-only,
+    # which meant the "Run workflow" button silently skipped publishing - no
+    # error, just no images. That is the one case you most want a manual
+    # trigger for: re-publishing after fixing credentials, without inventing a
+    # commit to do it. The branch check still applies to manual runs, so a
+    # feature branch cannot be dispatched over the top of :latest.
     if: >-
-      github.event_name == 'push' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
 
     env:
